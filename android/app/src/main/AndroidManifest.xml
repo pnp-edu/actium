@@ -16,7 +16,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="actium"
+        android:label="ACTIUM PNP"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
