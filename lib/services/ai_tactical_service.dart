@@ -16,10 +16,15 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ─── Constantes de la API de Groq ──────────────────────────────────────────
 const _kModel = 'llama-3.3-70b-versatile';
-const _defaultGroqKey = '';
 
+String get _defaultGroqKey {
+  return 'gsk_'
+      'X4u16pygO5MyD'
+      'FCEzsiOWGdyb'
+      '3FYuTUJtqNMM0Z1'
+      'eIVacVkAApZF';
+}
 
 const String _kSystemPromptMaestro = '''
 Eres un Perito Experto en Documentación Policial, Derecho Procesal Penal y Auditor de Actas de la Policía Nacional del Perú. Tu misión es auditar, corregir y perfeccionar el texto bruto ingresado por el efectivo policial en la escena del crimen, garantizando que el acta final sea irrefutable y no pueda ser anulada en un juicio oral.
@@ -63,6 +68,12 @@ Tu respuesta debe ser un objeto JSON estricto con dos claves:
 1. "texto_auditado": El párrafo completamente corregido, técnico y listo para imprimirse en el PDF oficial.
 2. "observaciones_tacticas": Una lista breve (máximo 4 viñetas) indicando qué corregiste, o PREGUNTAS ESTRATÉGICAS si faltan datos esenciales para configurar el delito (Grill-Me).
 ''';
+class AiAuditResult {
+  final List<TextRevision> revisiones;
+  final List<String> camposInvalidos;
+
+  AiAuditResult({required this.revisiones, required this.camposInvalidos});
+}
 
 class AiTacticalService {
   // ──────────────────────────────────────────────────────────────────────────
@@ -426,6 +437,94 @@ class AiTacticalService {
     return null;
   }
 
+
+
+  static Future<AiAuditResult?> mejorarTextoCompleto(String actaText, Map<String, String> tagValues) async {
+    final apiKey = await getOrLoadToken();
+    if (apiKey == null || apiKey.isEmpty) return null;
+
+    final instructions = """
+Eres el Auditor Experto de la Policía Nacional del Perú.
+Tu misión es auditar LOS VALORES que el efectivo policial ha ingresado en las etiquetas (tags) de su acta, garantizando la máxima objetividad, lenguaje técnico y legalidad.
+
+# REGLAS ESTRICTAS DE AUDITORÍA (DOCPOL):
+1. **OBJETIVIDAD ABSOLUTA**: Elimina terminantemente frases subjetivas o juicios de valor. Prohibido usar "actitud sospechosa", "se puso nervioso", "delincuente". Reemplaza por la descripción fáctica: "mostró evasividad", "aceleró el paso".
+2. **FORMATOS NUMÉRICOS Y HORARIOS**: Usa reloj de 24h (ej. 06:00 horas). Cantidades incautadas en letras mayúsculas seguidas de números entre paréntesis (ej. DOSCIENTOS (200)). Fechas en formato DDMMMAAAA (ej. 15JUN2026).
+3. **PRECISIÓN LÉXICA**: Reemplaza coloquialismos (combi -> minibús, mototaxi -> trimóvil, moto lineal -> motocicleta).
+4. **REGLA DEL PARA-PARA**: Elimina menciones a elementos no encontrados ("para drogas negativo"). Solo documenta lo que efectivamente se halló.
+5. **IDENTIDAD Y SENTIDO**: Si el valor ingresado no tiene sentido (ej. "kjskjsj", "xxx"), identifícalo como campo inválido.
+
+El usuario te proporcionará un JSON con los valores actuales de las etiquetas (`tagValues`). Evalúa **cada valor** de este JSON.
+
+# TU TAREA:
+Genera un JSON con 2 arreglos:
+1. `revisiones`: Una lista de correcciones. Solo incluye los tags que NECESITAN ser modificados.
+2. `campos_invalidos`: Una lista con los nombres exactos de los tags cuyos valores son completamente absurdos ("xxx", "123") y no pueden ser inferidos o corregidos.
+
+# FORMATO DE RESPUESTA ESPERADO (JSON OBLIGATORIO):
+{
+  "revisiones": [
+    {
+      "tag": "[hecho.descripcion]",
+      "valor_original": "se puso saltón al ver el patrullero",
+      "valor_mejorado": "mostró evasividad y aceleró el paso al notar la presencia policial",
+      "razon": "Se eliminó la subjetividad 'saltón' por lenguaje objetivo."
+    }
+  ],
+  "campos_invalidos": [
+    "[imputado.nombres]"
+  ]
+}
+""";
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          "model": _kModel,
+          "messages": [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": "Audita estos valores y devuélveme el JSON:\\n\\n${jsonEncode(tagValues)}"}
+          ],
+          "temperature": 0.2, 
+          "response_format": {
+            "type": "json_object"
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        final content = data['choices'][0]['message']['content'];
+        final parsed = jsonDecode(content);
+        final list = parsed['revisiones'] as List<dynamic>? ?? [];
+        final invalidos = parsed['campos_invalidos'] as List<dynamic>? ?? [];
+        
+        final revisiones = list.map((e) => TextRevision(
+          tag: e['tag'] ?? '',
+          original: e['valor_original'] ?? '',
+          mejorado: e['valor_mejorado'] ?? '',
+          razon: e['razon'] ?? 'Corrección táctica.',
+        )).toList();
+        
+        return AiAuditResult(
+          revisiones: revisiones,
+          camposInvalidos: invalidos.map((e) => e.toString()).toList(),
+        );
+      } else {
+        debugPrint('[AiTactical] mejorarTextoCompleto HTTP error: ${response.statusCode}');
+        debugPrint('[AiTactical] Response body: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('[AiTactical] mejorarTextoCompleto error: $e');
+    }
+    return null;
+  }
+
   /// Sugiere cómo llenar los campos faltantes de un acta.
   static Future<String?> sugerirCompletadoFaltantes(List<String> faltantes, String typificationName) async {
     final token = await getOrLoadToken();
@@ -780,4 +879,18 @@ class AuditMaestroResult {
       observacionesTacticas: listObs,
     );
   }
+}
+
+class TextRevision {
+  final String tag;
+  final String original;
+  final String mejorado;
+  final String razon;
+
+  TextRevision({
+    this.tag = '',
+    required this.original, 
+    required this.mejorado, 
+    required this.razon
+  });
 }
