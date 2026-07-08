@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/intervention_session.dart';
 import '../models/tags.dart';
 import '../providers/intervention_provider.dart';
+import '../services/ai_tactical_service.dart';
 import '../services/dni_service.dart';
+import '../utils/quill_content_helper.dart';
 
 class ActaEditorView extends StatefulWidget {
   final InterventionDocument document;
@@ -18,18 +20,28 @@ class ActaEditorView extends StatefulWidget {
 class _ActaEditorViewState extends State<ActaEditorView> {
   late TextEditingController _controller;
   bool _isEditingRaw = false;
+  bool _isImprovingWithAi = false;
+
+  // Local accepted toggles (mirrors provider's pendingRevisiones length)
+  List<bool> _accepted = [];
+  String? _localDocId; // tracks which doc the _accepted list belongs to
 
   @override
   void initState() {
     super.initState();
+    // Normalizar contenido por si tiene formato Delta JSON corrupto de versiones anteriores
+    widget.document.content = QuillContentHelper.normalizeToPlainText(widget.document.content);
     _controller = TextEditingController(text: widget.document.content);
   }
-  
+
   @override
   void didUpdateWidget(ActaEditorView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.document.id != widget.document.id) {
+      widget.document.content = QuillContentHelper.normalizeToPlainText(widget.document.content);
       _controller.text = widget.document.content;
+      _accepted = [];
+      _localDocId = null;
     }
   }
 
@@ -37,35 +49,336 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     widget.document.content = _controller.text;
   }
 
+  /// Resolves tags in the document content using current provider values.
+  // ignore: unused_element
+  String _resolveContent(InterventionProvider provider) {
+    final tagRegex = RegExp(r'\[(.*?)\]');
+    return widget.document.content.replaceAllMapped(tagRegex, (match) {
+      final tag = match.group(0)!;
+      final val = provider.getTagValue(tag);
+      return (val != null && val.isNotEmpty) ? val : tag;
+    });
+  }
+
+  /// Returns the current pending revisions (from provider if matching this doc).
+  List<TextRevision> _getRevisiones(InterventionProvider provider) {
+    if (provider.documentIdForRevisiones == widget.document.id &&
+        provider.pendingRevisiones.isNotEmpty) {
+      // Sync _accepted list if needed
+      if (_localDocId != widget.document.id ||
+          _accepted.length != provider.pendingRevisiones.length) {
+        _localDocId = widget.document.id;
+        _accepted = List.filled(provider.pendingRevisiones.length, true);
+      }
+      return provider.pendingRevisiones;
+    }
+    return [];
+  }
+
+  /// Triggers the AI improvement flow: calls Groq, then renders inline track-changes on document.
+  Future<void> _onMejorarConIa(InterventionProvider provider) async {
+    final existing = _getRevisiones(provider);
+    if (_isImprovingWithAi || existing.isNotEmpty) return;
+    
+    // Extraer las etiquetas y sus valores actuales
+    final tagRegex = RegExp(r'\[(.*?)\]');
+    final Map<String, String> tagValues = {};
+    for (final match in tagRegex.allMatches(widget.document.content)) {
+      final tag = match.group(0)!;
+      final val = provider.getTagValue(tag);
+      if (val != null && val.isNotEmpty) {
+        tagValues[tag] = val;
+      }
+    }
+
+    setState(() => _isImprovingWithAi = true);
+
+    AiAuditResult? auditResult;
+    try {
+      auditResult = await AiTacticalService.mejorarTextoCompleto(widget.document.content, tagValues);
+    } finally {
+      if (mounted) setState(() => _isImprovingWithAi = false);
+    }
+
+    if (!mounted) return;
+
+    if (auditResult == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠ Sin conexión con Groq — verifica tu API Key en Ajustes'),
+          backgroundColor: Color(0xFFB71C1C),
+        ),
+      );
+      return;
+    }
+
+    // Si la IA detectó datos basura, actualizamos el provider para que el Wizard los pinte de rojo
+    if (auditResult.camposInvalidos.isNotEmpty) {
+      provider.setInvalidFields(auditResult.camposInvalidos);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('⚠ La IA detectó ${auditResult.camposInvalidos.length} datos inválidos. Por favor, corrígelos en el formulario.'),
+          backgroundColor: Colors.orange.shade800,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      provider.clearInvalidFields(); // Todo bien, limpiamos
+    }
+
+    if (auditResult.revisiones.isEmpty) {
+      if (auditResult.camposInvalidos.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: const [
+              Icon(Icons.verified, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(child: Text('✅ El acta cumple con la doctrina DOCPOL — sin correcciones necesarias')),
+            ]),
+            backgroundColor: Colors.green.shade800,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Store in provider so the inline viewer picks them up reactively
+    provider.setPendingRevisiones(widget.document.id, auditResult.revisiones);
+    setState(() {
+      _localDocId = widget.document.id;
+      _accepted = List.filled(auditResult!.revisiones.length, true);
+    });
+  }
+
+  /// Apply accepted revisions to tags.
+  void _applyTagRevisiones(InterventionProvider provider) {
+    final revisiones = _getRevisiones(provider);
+    final acceptedRevs = <TextRevision>[];
+    
+    for (int i = 0; i < revisiones.length; i++) {
+      if (_accepted[i]) {
+        acceptedRevs.add(revisiones[i]);
+      }
+    }
+    
+    if (acceptedRevs.isNotEmpty) {
+      provider.applyAuditRevisions(acceptedRevs);
+    }
+    
+    final applied = acceptedRevs.length;
+    final rejected = _accepted.where((v) => !v).length;
+    
+    provider.clearPendingRevisiones();
+    setState(() {
+      _accepted = [];
+      _localDocId = null;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ $applied etiqueta(s) actualizadas · $rejected rechazadas'),
+        backgroundColor: Colors.green.shade800,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Dismiss all revisiones without applying.
+  void _discardTagRevisiones(InterventionProvider provider) {
+    provider.clearPendingRevisiones();
+    setState(() {
+      _accepted = [];
+      _localDocId = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final provider = context.watch<InterventionProvider>();
+    final revisiones = _getRevisiones(provider);
+    final hasRevisiones = revisiones.isNotEmpty;
+
     return Column(
       children: [
+        // ── Top toolbar ─────────────────────────────────────────────────────
         Container(
-          color: Colors.grey.shade200,
-          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text('Modo Editor (Plantilla): '),
-              Switch(
-                value: _isEditingRaw,
-                onChanged: (val) {
-                  setState(() {
-                    if (!val) {
-                      _saveContent();
-                    }
-                    _isEditingRaw = val;
-                  });
-                },
-              ),
+              // Modo Editor toggle or revision count
+              if (!hasRevisiones) ...
+                [
+                  const Text(
+                    'Plantilla:',
+                    style: TextStyle(fontSize: 12, color: Colors.white60),
+                  ),
+                  Switch(
+                    value: _isEditingRaw,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      setState(() {
+                        if (!val) _saveContent();
+                        _isEditingRaw = val;
+                      });
+                    },
+                  ),
+                ]
+              else
+                Row(
+                  children: [
+                    const Icon(Icons.auto_fix_high, color: Color(0xFF7B2FFF), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${revisiones.length} sugerencias DOCPOL',
+                      style: const TextStyle(
+                        color: Color(0xFF7B2FFF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              const Spacer(),
+              // ✨ Action buttons
+              if (hasRevisiones) ...
+                [
+                  GestureDetector(
+                    onTap: () => _discardTagRevisiones(provider),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF5350).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFEF5350).withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.close, color: Color(0xFFEF5350), size: 14),
+                          SizedBox(width: 4),
+                          Text('Descartar', style: TextStyle(color: Color(0xFFEF5350), fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _applyTagRevisiones(provider),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E90FF), Color(0xFF0066CC)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF1E90FF).withValues(alpha: 0.4),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        'Aplicar ${_accepted.where((v) => v).length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ]
+              else
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _isImprovingWithAi
+                      ? Container(
+                          key: const ValueKey('loading'),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF7B2FFF), Color(0xFF1E90FF)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Analizando...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : GestureDetector(
+                          key: const ValueKey('button'),
+                          onTap: () => _onMejorarConIa(provider),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF7B2FFF), Color(0xFF1E90FF)],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF7B2FFF).withValues(alpha: 0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_fix_high, color: Colors.white, size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Mejorar con IA',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                ),
             ],
           ),
         ),
+        // ── Document body ─────────────────────────────────────────────────────
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: _isEditingRaw 
+            child: _isEditingRaw
                 ? TextField(
                     controller: _controller,
                     maxLines: null,
@@ -73,10 +386,695 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                     decoration: const InputDecoration(border: OutlineInputBorder()),
                     onChanged: (val) => _saveContent(),
                   )
-                : InteractiveDocumentViewer(content: widget.document.content),
+                : hasRevisiones
+                    ? _RevisionCardsViewer(
+                        revisiones: revisiones,
+                        accepted: _accepted,
+                        onToggle: (i, val) => setState(() => _accepted[i] = val),
+                        onAcceptAll: () => setState(() => _accepted = List.filled(revisiones.length, true)),
+                        onRejectAll: () => setState(() => _accepted = List.filled(revisiones.length, false)),
+                        onApply: () => _applyTagRevisiones(provider),
+                        onDiscard: () => _discardTagRevisiones(provider),
+                      )
+                    : InteractiveDocumentViewer(content: widget.document.content),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Revision Cards Viewer
+// ════════════════════════════════════════════════════════════════════════════
+
+class _RevisionCardsViewer extends StatelessWidget {
+  final List<TextRevision> revisiones;
+  final List<bool> accepted;
+  final void Function(int index, bool val) onToggle;
+  final VoidCallback onAcceptAll;
+  final VoidCallback onRejectAll;
+  final VoidCallback onApply;
+  final VoidCallback onDiscard;
+
+  const _RevisionCardsViewer({
+    required this.revisiones,
+    required this.accepted,
+    required this.onToggle,
+    required this.onAcceptAll,
+    required this.onRejectAll,
+    required this.onApply,
+    required this.onDiscard,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final acceptedCount = accepted.where((v) => v).length;
+
+    return Column(
+      children: [
+        // ── Accept / Reject All bar ─────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A3A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF7B2FFF).withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.balance, color: Color(0xFFBB86FC), size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$acceptedCount de ${revisiones.length} correcciones seleccionadas',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: onRejectAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                ),
+                child: const Text(
+                  '✗ Ninguna',
+                  style: TextStyle(color: Color(0xFFEF5350), fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton(
+                onPressed: onAcceptAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                ),
+                child: const Text(
+                  '✓ Todas',
+                  style: TextStyle(color: Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // ── List of Revision Cards ──────────────────────────────────────────
+        Expanded(
+          child: ListView.builder(
+            physics: const BouncingScrollPhysics(),
+            itemCount: revisiones.length,
+            itemBuilder: (context, index) {
+              final rev = revisiones[index];
+              final isAccepted = accepted[index];
+              return _ViewerRevisionCard(
+                revision: rev,
+                isAccepted: isAccepted,
+                onToggle: (val) => onToggle(index, val),
+              );
+            },
+          ),
+        ),
+        // ── Bottom action bar ───────────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFEF5350)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.close, color: Color(0xFFEF5350), size: 16),
+                  label: const Text(
+                    'Rechazar todas',
+                    style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: onDiscard,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E90FF),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 16),
+                  label: Text(
+                    'Aplicar $acceptedCount corrección(es)',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: acceptedCount > 0 ? onApply : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ViewerRevisionCard extends StatelessWidget {
+  final TextRevision revision;
+  final bool isAccepted;
+  final ValueChanged<bool> onToggle;
+
+  const _ViewerRevisionCard({
+    required this.revision,
+    required this.isAccepted,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isAccepted ? const Color(0xFF1E90FF) : Colors.grey.shade300,
+          width: isAccepted ? 2 : 1,
+        ),
+      ),
+      color: isAccepted ? const Color(0xFF1E90FF).withValues(alpha: 0.05) : Colors.white,
+      child: InkWell(
+        onTap: () => onToggle(!isAccepted),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      revision.tag,
+                      style: const TextStyle(
+                        color: Color(0xFF6A1B9A),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    isAccepted ? Icons.check_circle : Icons.circle_outlined,
+                    color: isAccepted ? const Color(0xFF1E90FF) : Colors.grey.shade400,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text('Original:', style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                revision.original,
+                style: const TextStyle(
+                  color: Color(0xFFB71C1C),
+                  fontSize: 14,
+                  height: 1.5,
+                  decoration: TextDecoration.lineThrough,
+                  decorationColor: Color(0xFFEF5350),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text('Sugerencia:', style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                revision.mejorado,
+                style: const TextStyle(
+                  color: Color(0xFF0D47A1),
+                  fontSize: 14,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, size: 14, color: Colors.black54),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        revision.razon,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// removed
+
+// ════════════════════════════════════════════════════════════════════════════
+// Track Changes Bottom Sheet
+// ════════════════════════════════════════════════════════════════════════════
+
+class _TrackChangesSheet extends StatefulWidget {
+  final List<TextRevision> revisiones;
+  final void Function(List<TextRevision> aplicadas) onApply;
+
+  const _TrackChangesSheet({
+    required this.revisiones,
+    required this.onApply,
+  });
+
+  @override
+  State<_TrackChangesSheet> createState() => _TrackChangesSheetState();
+}
+
+class _TrackChangesSheetState extends State<_TrackChangesSheet> {
+  late List<bool> _accepted;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default: all accepted
+    _accepted = List.filled(widget.revisiones.length, true);
+  }
+
+  void _acceptAll() => setState(() => _accepted = List.filled(widget.revisiones.length, true));
+  void _rejectAll() => setState(() => _accepted = List.filled(widget.revisiones.length, false));
+
+  void _apply() {
+    final aplicadas = <TextRevision>[];
+    for (int i = 0; i < widget.revisiones.length; i++) {
+      if (_accepted[i]) aplicadas.add(widget.revisiones[i]);
+    }
+    Navigator.pop(context);
+    widget.onApply(aplicadas);
+    // Show confirmation snack
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            '✅ ${aplicadas.length} corrección(es) aplicadas | '
+            '${widget.revisiones.length - aplicadas.length} rechazadas'),
+        backgroundColor: Colors.green.shade800,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final acceptedCount = _accepted.where((v) => v).length;
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.97,
+      builder: (ctx, scrollCtrl) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF12122A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // ── Handle bar ────────────────────────────────────────────────
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // ── Header ────────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B2FFF), Color(0xFF1E90FF)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.auto_fix_high, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Correcciones DOCPOL',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            '${widget.revisiones.length} cambios detectados · $acceptedCount seleccionados',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Accept/Reject All row
+                    TextButton(
+                      onPressed: _acceptAll,
+                      child: const Text('✓ Todos', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 12)),
+                    ),
+                    TextButton(
+                      onPressed: _rejectAll,
+                      child: const Text('✗ Ninguno', style: TextStyle(color: Color(0xFFEF5350), fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white10, height: 1),
+              // ── List of revisions ──────────────────────────────────────────
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  itemCount: widget.revisiones.length,
+                  itemBuilder: (ctx, i) {
+                    final rev = widget.revisiones[i];
+                    final isAccepted = _accepted[i];
+                    return _RevisionCard(
+                      revision: rev,
+                      isAccepted: isAccepted,
+                      index: i + 1,
+                      onToggle: (val) => setState(() => _accepted[i] = val),
+                    );
+                  },
+                ),
+              ),
+              // ── Action bar ────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.white10)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFEF5350)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.close, color: Color(0xFFEF5350), size: 18),
+                          label: const Text(
+                            'Rechazar todos',
+                            style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E90FF),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                          label: Text(
+                            'Aplicar $acceptedCount corrección(es)',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          onPressed: acceptedCount > 0 ? _apply : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Individual revision card with track-changes display ──────────────────────
+class _RevisionCard extends StatefulWidget {
+  final TextRevision revision;
+  final bool isAccepted;
+  final int index;
+  final void Function(bool) onToggle;
+
+  const _RevisionCard({
+    required this.revision,
+    required this.isAccepted,
+    required this.index,
+    required this.onToggle,
+  });
+
+  @override
+  State<_RevisionCard> createState() => _RevisionCardState();
+}
+
+class _RevisionCardState extends State<_RevisionCard> {
+  bool _showReason = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAccepted = widget.isAccepted;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A3A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isAccepted
+              ? const Color(0xFF1E90FF).withValues(alpha: 0.5)
+              : Colors.white12,
+          width: isAccepted ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Card header: number + toggle buttons ────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: isAccepted
+                        ? const Color(0xFF1E90FF)
+                        : Colors.white12,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${widget.index}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Corrección ${widget.index}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                // Info button
+                GestureDetector(
+                  onTap: () => setState(() => _showReason = !_showReason),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(
+                      _showReason ? Icons.info : Icons.info_outline,
+                      color: Colors.white38,
+                      size: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Reject (X) button
+                GestureDetector(
+                  onTap: () => widget.onToggle(false),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: !isAccepted
+                          ? const Color(0xFFEF5350).withValues(alpha: 0.2)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.close,
+                      color: !isAccepted ? const Color(0xFFEF5350) : Colors.white24,
+                      size: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Accept (check) button
+                GestureDetector(
+                  onTap: () => widget.onToggle(true),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: isAccepted
+                          ? const Color(0xFF4CAF50).withValues(alpha: 0.2)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      color: isAccepted ? const Color(0xFF4CAF50) : Colors.white24,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Reason tooltip (expandable) ─────────────────────────────────
+          if (_showReason)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7B2FFF).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF7B2FFF).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.balance, color: Color(0xFFBB86FC), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.revision.razon,
+                      style: const TextStyle(
+                        color: Color(0xFFBB86FC),
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(color: Colors.white10, height: 1),
+          // ── Original text (strikethrough, red) ──────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 3,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 8, top: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF5350),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    widget.revision.original,
+                    style: const TextStyle(
+                      color: Color(0xFFEF9A9A),
+                      fontSize: 13,
+                      height: 1.5,
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Color(0xFFEF5350),
+                      decorationThickness: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Improved text (blue) ─────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 3,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 8, top: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E90FF),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    widget.revision.mejorado,
+                    style: const TextStyle(
+                      color: Color(0xFF90CAF9),
+                      fontSize: 13,
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
