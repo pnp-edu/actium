@@ -7,6 +7,7 @@ import '../providers/intervention_provider.dart';
 import '../services/ai_tactical_service.dart';
 import '../services/dni_service.dart';
 import '../utils/quill_content_helper.dart';
+import 'acta_editor_controller.dart';
 
 class ActaEditorView extends StatefulWidget {
   final InterventionDocument document;
@@ -18,8 +19,7 @@ class ActaEditorView extends StatefulWidget {
 }
 
 class _ActaEditorViewState extends State<ActaEditorView> {
-  late TextEditingController _controller;
-  bool _isEditingRaw = false;
+  late ActaEditorController _controller;
   bool _isImprovingWithAi = false;
 
   // Local accepted toggles (mirrors provider's pendingRevisiones length)
@@ -29,9 +29,35 @@ class _ActaEditorViewState extends State<ActaEditorView> {
   @override
   void initState() {
     super.initState();
-    // Normalizar contenido por si tiene formato Delta JSON corrupto de versiones anteriores
     widget.document.content = QuillContentHelper.normalizeToPlainText(widget.document.content);
-    _controller = TextEditingController(text: widget.document.content);
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!mounted) return;
+    // We initialize the controller here to access context.read
+    // if it hasn't been initialized yet.
+    try {
+      _controller.text; // checking if initialized
+    } catch (_) {
+      final provider = context.read<InterventionProvider>();
+      final processed = InteractiveDocumentViewer.processConditions(widget.document.content, provider);
+      _controller = ActaEditorController(
+        initialText: processed,
+        provider: provider,
+        context: context,
+        onTagTapped: _onTagTappedCallback,
+      );
+    }
+  }
+
+  void _onTagTappedCallback(String tagString, TagDefinition? tagDef, String? currentValue) {
+    // Re-use InteractiveDocumentViewer's logic but we need an instance
+    final tempViewer = InteractiveDocumentViewer(content: '');
+    tempViewer.onTagTappedPublic(context, tagString, tagDef, currentValue, () {
+      _controller.hideTag(tagString);
+    });
   }
 
   @override
@@ -80,24 +106,50 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     final existing = _getRevisiones(provider);
     if (_isImprovingWithAi || existing.isNotEmpty) return;
     
-    // Extraer las etiquetas y sus valores actuales
+    // Recopilar las etiquetas de TODAS las actas de la sesión (no solo la actual)
     final tagRegex = RegExp(r'\[(.*?)\]');
     final Map<String, String> tagValues = {};
-    for (final match in tagRegex.allMatches(widget.document.content)) {
-      final tag = match.group(0)!;
-      final val = provider.getTagValue(tag);
-      if (val != null && val.isNotEmpty) {
-        tagValues[tag] = val;
+
+    final session = provider.currentSession;
+    final allDocs = session?.documents ?? [widget.document];
+
+    for (final doc in allDocs) {
+      for (final match in tagRegex.allMatches(doc.content)) {
+        final tag = match.group(0)!;
+        if (tagValues.containsKey(tag)) continue; // ya tenemos el valor
+        final val = provider.getTagValue(tag);
+        if (val != null && val.isNotEmpty) {
+          tagValues[tag] = val;
+        }
       }
     }
 
     setState(() => _isImprovingWithAi = true);
 
+    final docCount = allDocs.length;
+    if (mounted && docCount > 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const SizedBox(width: 4),
+            const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            const SizedBox(width: 12),
+            Text('Auditando $docCount actas de la intervención...'),
+          ]),
+          backgroundColor: const Color(0xFF7B2FFF),
+          duration: const Duration(seconds: 30),
+        ),
+      );
+    }
+
     AiAuditResult? auditResult;
     try {
       auditResult = await AiTacticalService.mejorarTextoCompleto(widget.document.content, tagValues);
     } finally {
-      if (mounted) setState(() => _isImprovingWithAi = false);
+      if (mounted) {
+        setState(() => _isImprovingWithAi = false);
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
     }
 
     if (!mounted) return;
@@ -117,13 +169,13 @@ class _ActaEditorViewState extends State<ActaEditorView> {
       provider.setInvalidFields(auditResult.camposInvalidos);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('⚠ La IA detectó ${auditResult.camposInvalidos.length} datos inválidos. Por favor, corrígelos en el formulario.'),
+          content: Text('⚠ La IA detectó ${auditResult.camposInvalidos.length} datos insuficientes o inválidos. Por favor, corrígelos.'),
           backgroundColor: Colors.orange.shade800,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ),
       );
     } else {
-      provider.clearInvalidFields(); // Todo bien, limpiamos
+      provider.clearInvalidFields();
     }
 
     if (auditResult.revisiones.isEmpty) {
@@ -133,7 +185,7 @@ class _ActaEditorViewState extends State<ActaEditorView> {
             content: Row(children: const [
               Icon(Icons.verified, color: Colors.white, size: 20),
               SizedBox(width: 8),
-              Expanded(child: Text('✅ El acta cumple con la doctrina DOCPOL — sin correcciones necesarias')),
+              Expanded(child: Text('✅ Todas las actas cumplen con la doctrina DOCPOL — sin correcciones necesarias')),
             ]),
             backgroundColor: Colors.green.shade800,
             duration: const Duration(seconds: 4),
@@ -150,6 +202,7 @@ class _ActaEditorViewState extends State<ActaEditorView> {
       _accepted = List.filled(auditResult!.revisiones.length, true);
     });
   }
+
 
   /// Apply accepted revisions to tags.
   void _applyTagRevisiones(InterventionProvider provider) {
@@ -213,25 +266,8 @@ class _ActaEditorViewState extends State<ActaEditorView> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              // Modo Editor toggle or revision count
-              if (!hasRevisiones) ...
-                [
-                  const Text(
-                    'Plantilla:',
-                    style: TextStyle(fontSize: 12, color: Colors.white60),
-                  ),
-                  Switch(
-                    value: _isEditingRaw,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onChanged: (val) {
-                      setState(() {
-                        if (!val) _saveContent();
-                        _isEditingRaw = val;
-                      });
-                    },
-                  ),
-                ]
-              else
+              // Revision count
+              if (hasRevisiones)
                 Row(
                   children: [
                     const Icon(Icons.auto_fix_high, color: Color(0xFF7B2FFF), size: 16),
@@ -378,25 +414,47 @@ class _ActaEditorViewState extends State<ActaEditorView> {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: _isEditingRaw
-                ? TextField(
-                    controller: _controller,
-                    maxLines: null,
-                    expands: true,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    onChanged: (val) => _saveContent(),
+            child: hasRevisiones
+                ? _RevisionCardsViewer(
+                    revisiones: revisiones,
+                    accepted: _accepted,
+                    onToggle: (i, val) => setState(() => _accepted[i] = val),
+                    onAcceptAll: () => setState(() => _accepted = List.filled(revisiones.length, true)),
+                    onRejectAll: () => setState(() => _accepted = List.filled(revisiones.length, false)),
+                    onApply: () => _applyTagRevisiones(provider),
+                    onDiscard: () => _discardTagRevisiones(provider),
                   )
-                : hasRevisiones
-                    ? _RevisionCardsViewer(
-                        revisiones: revisiones,
-                        accepted: _accepted,
-                        onToggle: (i, val) => setState(() => _accepted[i] = val),
-                        onAcceptAll: () => setState(() => _accepted = List.filled(revisiones.length, true)),
-                        onRejectAll: () => setState(() => _accepted = List.filled(revisiones.length, false)),
-                        onApply: () => _applyTagRevisiones(provider),
-                        onDiscard: () => _discardTagRevisiones(provider),
-                      )
-                    : InteractiveDocumentViewer(content: widget.document.content),
+                : Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                    child: TextField(
+                      controller: _controller,
+                      maxLines: null,
+                      expands: true,
+                      strutStyle: const StrutStyle(
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
+                      style: const TextStyle(
+                          color: Colors.black87, fontSize: 15, height: null),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        filled: false,
+                        fillColor: Colors.transparent,
+                      ),
+                      onChanged: (val) => _saveContent(),
+                    ),
+                  ),
           ),
         ),
       ],
@@ -515,19 +573,19 @@ class _RevisionCardsViewer extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                flex: 2,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E90FF),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 16),
-                  label: Text(
-                    'Aplicar $acceptedCount corrección(es)',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  icon: const Icon(Icons.check, size: 16),
+                  label: const Text(
+                    'Aplicar seleccionadas',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
-                  onPressed: acceptedCount > 0 ? onApply : null,
+                  onPressed: onApply,
                 ),
               ),
             ],
@@ -551,17 +609,40 @@ class _ViewerRevisionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final acceptedCardColor = isDark 
+        ? const Color(0xFF1E90FF).withValues(alpha: 0.15) 
+        : const Color(0xFF1E90FF).withValues(alpha: 0.05);
+    final unacceptedCardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final borderColor = isAccepted ? const Color(0xFF1E90FF) : (isDark ? Colors.grey.shade800 : Colors.grey.shade300);
+
+    final tagBgColor = isDark ? const Color(0xFF9C27B0).withValues(alpha: 0.2) : const Color(0xFF9C27B0).withValues(alpha: 0.1);
+    final tagTextColor = isDark ? Colors.purple.shade200 : const Color(0xFF6A1B9A);
+
+    final labelColor = isDark ? Colors.grey.shade400 : Colors.black54;
+    final originalTextColor = isDark ? Colors.red.shade300 : const Color(0xFFB71C1C);
+    final originalDecorationColor = isDark ? Colors.red.shade400 : const Color(0xFFEF5350);
+    final suggestionTextColor = isDark ? Colors.blue.shade200 : const Color(0xFF0D47A1);
+
+    final inputBgColor = isDark ? Colors.black26 : Colors.blue.withValues(alpha: 0.05);
+    final inputBorderColor = isDark ? Colors.blue.withValues(alpha: 0.3) : Colors.blue.withValues(alpha: 0.2);
+
+    final infoBgColor = isDark ? Colors.grey.shade900 : Colors.grey.shade50;
+    final infoBorderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+    final infoTextColor = isDark ? Colors.grey.shade300 : Colors.black87;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isAccepted ? const Color(0xFF1E90FF) : Colors.grey.shade300,
+          color: borderColor,
           width: isAccepted ? 2 : 1,
         ),
       ),
-      color: isAccepted ? const Color(0xFF1E90FF).withValues(alpha: 0.05) : Colors.white,
+      color: isAccepted ? acceptedCardColor : unacceptedCardColor,
       child: InkWell(
         onTap: () => onToggle(!isAccepted),
         borderRadius: BorderRadius.circular(12),
@@ -576,13 +657,13 @@ class _ViewerRevisionCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
+                      color: tagBgColor,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       revision.tag,
-                      style: const TextStyle(
-                        color: Color(0xFF6A1B9A),
+                      style: TextStyle(
+                        color: tagTextColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                         fontFamily: 'monospace',
@@ -591,42 +672,62 @@ class _ViewerRevisionCard extends StatelessWidget {
                   ),
                   Icon(
                     isAccepted ? Icons.check_circle : Icons.circle_outlined,
-                    color: isAccepted ? const Color(0xFF1E90FF) : Colors.grey.shade400,
+                    color: isAccepted ? const Color(0xFF1E90FF) : (isDark ? Colors.grey.shade600 : Colors.grey.shade400),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              const Text('Original:', style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.bold)),
+              Text('Original:', style: TextStyle(fontSize: 12, color: labelColor, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
                 revision.original,
-                style: const TextStyle(
-                  color: Color(0xFFB71C1C),
+                style: TextStyle(
+                  color: originalTextColor,
                   fontSize: 14,
                   height: 1.5,
                   decoration: TextDecoration.lineThrough,
-                  decorationColor: Color(0xFFEF5350),
+                  decorationColor: originalDecorationColor,
                 ),
               ),
               const SizedBox(height: 12),
-              const Text('Sugerencia:', style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.bold)),
+              Text('Sugerencia:', style: TextStyle(fontSize: 12, color: labelColor, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              Text(
-                revision.mejorado,
-                style: const TextStyle(
-                  color: Color(0xFF0D47A1),
+              TextFormField(
+                initialValue: revision.mejorado,
+                onChanged: (val) {
+                  revision.mejorado = val;
+                },
+                maxLines: null,
+                style: TextStyle(
+                  color: suggestionTextColor,
                   fontSize: 14,
                   height: 1.5,
                   fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  filled: true,
+                  fillColor: inputBgColor,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: inputBorderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF1E90FF)),
+                  ),
+                  hintText: 'Escribe la corrección aquí',
+                  hintStyle: TextStyle(color: isDark ? Colors.blue.withValues(alpha: 0.4) : Colors.blue.withValues(alpha: 0.5)),
                 ),
               ),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
+                  color: infoBgColor,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: infoBorderColor),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1104,7 +1205,7 @@ class InteractiveDocumentViewer extends StatelessWidget {
   static final RegExp _tagRegex = RegExp(r'\[(.*?)\]');
   static final RegExp _safetyRegex = RegExp(r'<\s*/?\s*IF_[A-Z0-9_]+\s*>', caseSensitive: false);
 
-  String _processConditions(String text, InterventionProvider provider) {
+  static String processConditions(String text, InterventionProvider provider) {
     String result = text;
 
     for (final key in _conditionKeys) {
@@ -1125,7 +1226,7 @@ class InteractiveDocumentViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<InterventionProvider>();
-    final processedContent = _processConditions(content, provider);
+    final processedContent = processConditions(content, provider);
     print("DEBUG ACTA CONTENT INPUT: $content");
     print("DEBUG ACTA CONTENT OUTPUT: $processedContent");
     
@@ -1226,6 +1327,50 @@ class InteractiveDocumentViewer extends StatelessWidget {
     );
   }
 
+  void onTagTappedPublic(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue, VoidCallback onHide) {
+    final isPerson = tagString.startsWith('[imputado.') ||
+                     tagString.startsWith('[testigo.') ||
+                     tagString.startsWith('[agraviado.');
+
+    if (!isPerson) {
+      _showInputModal(context, tagString, tagDef, currentValue, onHide);
+      return;
+    }
+
+    final dniTag = tagString.startsWith('[imputado.')
+        ? '[imputado.dni]'
+        : tagString.startsWith('[testigo.')
+            ? '[testigo.dni]'
+            : '[agraviado.dni]';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return PersonEntryMethodSheet(
+          tagStr: tagString,
+          tagDef: tagDef,
+          currentValue: currentValue,
+          dniTag: dniTag,
+          onHide: onHide,
+          onChoice: (method) {
+            Navigator.pop(ctx);
+            if (method == 'manual') {
+              _showInputModal(context, tagString, tagDef, currentValue, onHide);
+            } else {
+              final dniDef = TagsRepository.tagMap[dniTag];
+              final currentDniVal = context.read<InterventionProvider>().getTagValue(dniTag);
+              _showInputModal(context, dniTag, dniDef, currentDniVal, onHide);
+            }
+          },
+        );
+      },
+    );
+  }
+
   void _onTagTapped(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue) {
     final isPerson = tagString.startsWith('[imputado.') ||
                      tagString.startsWith('[testigo.') ||
@@ -1269,7 +1414,7 @@ class InteractiveDocumentViewer extends StatelessWidget {
     );
   }
 
-  void _showInputModal(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue) {
+  void _showInputModal(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue, [VoidCallback? onHide]) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1278,7 +1423,7 @@ class InteractiveDocumentViewer extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return TagInputWidget(tagString: tagString, tagDef: tagDef, initialValue: currentValue);
+        return TagInputWidget(tagString: tagString, tagDef: tagDef, initialValue: currentValue, onHide: onHide);
       },
     );
   }
@@ -1288,8 +1433,9 @@ class TagInputWidget extends StatefulWidget {
   final String tagString;
   final TagDefinition? tagDef;
   final String? initialValue;
+  final VoidCallback? onHide;
 
-  const TagInputWidget({super.key, required this.tagString, this.tagDef, this.initialValue});
+  const TagInputWidget({super.key, required this.tagString, this.tagDef, this.initialValue, this.onHide});
 
   @override
   State<TagInputWidget> createState() => _TagInputWidgetState();
@@ -2420,8 +2566,22 @@ class _TagInputWidgetState extends State<TagInputWidget> {
             const SizedBox(height: 12),
           ],
           const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () {
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (widget.onHide != null)
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.red.shade400),
+                  icon: const Icon(Icons.visibility_off, size: 18),
+                  label: const Text('Ocultar'),
+                  onPressed: () {
+                    widget.onHide!();
+                    Navigator.pop(context);
+                  },
+                ),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: () {
               final val = _ctrl.text.trim();
               final cleanVal = val.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
               final cleanDniId = _dniResultado?.id.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
@@ -2442,6 +2602,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
               Navigator.pop(context);
             },
             child: const Text('Guardar'),
+          ),
+            ],
           ),
         ],
       ),
@@ -2465,6 +2627,7 @@ class PersonEntryMethodSheet extends StatelessWidget {
   final String? currentValue;
   final String dniTag;
   final ValueChanged<String> onChoice; // 'manual' or 'dni'
+  final VoidCallback? onHide;
 
   const PersonEntryMethodSheet({
     super.key,
@@ -2473,6 +2636,7 @@ class PersonEntryMethodSheet extends StatelessWidget {
     this.currentValue,
     required this.dniTag,
     required this.onChoice,
+    this.onHide,
   });
 
   @override
@@ -2643,6 +2807,66 @@ class PersonEntryMethodSheet extends StatelessWidget {
               ),
             ),
           ),
+          
+          if (onHide != null) ...[
+            const SizedBox(height: 12),
+            // Option 3: Ocultar Etiqueta
+            InkWell(
+              onTap: () {
+                onHide!();
+                Navigator.pop(context);
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.red.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.visibility_off, color: Colors.redAccent, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Ocultar Etiqueta',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Remover esta etiqueta del texto',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: Colors.redAccent),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

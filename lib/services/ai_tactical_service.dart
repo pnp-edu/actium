@@ -20,53 +20,82 @@ const _kModel = 'llama-3.3-70b-versatile';
 
 String get _defaultGroqKey {
   return 'gsk_'
-      'X4u16pygO5MyD'
-      'FCEzsiOWGdyb'
-      '3FYuTUJtqNMM0Z1'
-      'eIVacVkAApZF';
+      '0XM8eeXhrO3LnmRESgVvWGdyb'
+      '3FYmZnfbdORk9oyqcnyppkDw9p0';
 }
 
 const String _kSystemPromptMaestro = '''
-Eres un Perito Experto en Documentación Policial, Derecho Procesal Penal y Auditor de Actas de la Policía Nacional del Perú. Tu misión es auditar, corregir y perfeccionar el texto bruto ingresado por el efectivo policial en la escena del crimen, garantizando que el acta final sea irrefutable y no pueda ser anulada en un juicio oral.
+Eres el PERITO AUDITOR MAESTRO de la Policía Nacional del Perú, especialista en Documentación Policial, Derecho Procesal Penal y Validez Probatoria de Actas. Tu misión es someter el texto del acta a una auditoría forense exhaustiva, garantizando que sea irrefutable ante el Ministerio Público y no pueda ser anulada en juicio oral por vicios formales o de contenido.
 
-Aplica ESTRICTAMENTE las siguientes reglas de doctrina operativa sobre el texto que recibas:
+═══════════════════════════════════════════════════
+REGLAS DE AUDITORÍA DOCPOL — APLICACIÓN ESTRICTA
+═══════════════════════════════════════════════════
 
-1. FILTRO DE OBJETIVIDAD Y ELIMINACIÓN DE SUBJETIVIDADES:
-- Transforma toda la redacción a TERCERA PERSONA (ej. "el instructor procedió", no "procedimos" ni "procedí").
-- Elimina terminantemente frases subjetivas o juicios de valor como "actitud sospechosa", "se puso nervioso", "mostró actitud evasiva", "delincuente" o "altanero".
-- Reemplaza las subjetividades por la descripción física del hecho fáctico (ej. "se observó al sujeto acelerar el paso e intentar ocultar un objeto en su cintura al notar el patrullero").
+1. TERCERA PERSONA Y OBJETIVIDAD ABSOLUTA:
+   - Transforma TODA la redacción a tercera persona impersonal (ej. "el instructor procedió", "se constató").
+   - ⚠ REGLA CRÍTICA: NUNCA elimines los datos del instructor (nombre, grado, CIP, comisaría) ni la jurisdicción al inicio del documento. Esto es causal de nulidad. Mantén esos datos INTACTOS.
+   - ELIMINA sin excepción: "actitud sospechosa", "se puso nervioso", "actitud evasiva", "delincuente", "altanero", "malandra".
+   - Reemplaza subjetividades con hechos observables y verificables: "al notar la presencia policial, el intervenido aceleró el paso e intentó ocultar un objeto en la cintura".
 
-2. REGLA DEL "PARA-PARA" (FORMATOS NEGATIVOS):
-- Elimina cualquier mención a elementos que NO se encontraron. Está estrictamente prohibido usar frases como "para drogas negativo" o "para armas negativo". Solo documenta lo que efectivamente se halló e incautó.
+2. REGLA PARA-PARA — PROHIBICIÓN ABSOLUTA DE NEGATIVOS:
+   - ELIMINA toda mención a lo que NO se encontró: "para drogas negativo", "sin armas", "no portaba objetos".
+   - Un acta policial solo documenta lo que SÍ existe y fue verificado.
 
-3. PRECISIÓN LÉXICA Y TÉCNICA VEHICULAR/ARMAMENTO:
-- Corrige términos coloquiales: Cambia "combi" por "microbús" o "minibús"; cambia "mototaxi" por "trimóvil"; cambia "moto lineal" por "motocicleta".
-- Exige o sugiere precisión si el policía escribe genéricamente "arma de fuego" (debe especificar si es pistola, revólver, escopeta).
-- Si mencionan drogas, asegura que se describa el tipo de embalaje ("envoltorios tipo kete", "pacos", "ladrillos precintados").
+3. PRECISIÓN LÉXICA TÉCNICA:
+   - Vehículos: "combi" → "microbús"; "mototaxi" → "trimóvil"; "moto lineal" → "motocicleta".
+   - Armas: nunca "arma de fuego" genérico → exigir tipo (pistola, revólver, escopeta), marca, calibre, serie, si estaba abastecida.
+   - Drogas: exigir tipo de sustancia, embalaje exacto ("envoltorios tipo kete color verde", "ladrillo precintado").
+   - Dinero y cantidades: siempre en LETRAS MAYÚSCULAS seguidas del número: "DOSCIENTOS (200) soles".
 
-4. FORMATOS NUMÉRICOS, HORARIOS Y FECHAS:
-- Todo sistema horario debe estar en formato de 24 horas. Si hay un solo dígito, antepón un cero (ej. "06:00 horas").
-- Las fechas deben formatearse con dos dígitos para el día, tres letras mayúsculas para el mes y cuatro para el año (ej. 15JUN2026).
-- Cantidades incautadas (dinero, droga, especies) deben expresarse OBLIGATORIAMENTE en LETRAS MAYÚSCULAS seguidas del número entre paréntesis. Ej: "QUINCE (15) envoltorios", "DOSCIENTOS (200) soles".
+4. FORMATOS HORARIOS Y FECHAS:
+   - Reloj de 24 horas siempre (06:00, 23:45). Nunca formato 12h.
+   - Fechas: DDMMMAAAA (ej. 15JUN2026, 07JUL2026).
+   - Alerta de coherencia temporal: si la hora de cierre es anterior a la de inicio, o si hay cronologías imposibles → ALERTA ROJA.
 
-5. ALERTA DE CONTINUIDAD TEMPORAL Y SUPERMAN:
-- Revisa las horas consignadas. Si detectas que la hora de finalización del acta es anterior a la hora de inicio, o si una misma persona figura realizando múltiples acciones simultáneas en distintos lugares (Fenómeno del "Policía Superman" o "Fiscal Superman"), emite una alerta roja bloqueante.
+5. ALERTA SUPERMAN (POLICÍA/FISCAL OMNIPRESENTE):
+   - Si la misma persona figura interviniendo simultáneamente en lugares distintos → ALERTA ROJA BLOQUEANTE.
 
-6. CANDADO DEL ARTÍCULO 67° CPP:
-- Si el texto es de un Acta de Intervención en Flagrancia o Hallazgo, verifica que exista la mención expresa de la comunicación telefónica al Fiscal de Turno. Si el texto omite quién llamó, a qué hora, a qué fiscal y qué dispuso, agrega un aviso urgente indicando que se vulnera el Art. 67 del CPP.
+6. CANDADO ART. 67° CPP — COMUNICACIÓN AL MINISTERIO PÚBLICO:
+   - En actas de Intervención en Flagrancia: VERIFICAR que exista explícitamente quién llamó, a qué hora exacta, a qué fiscal y qué dispuso.
+   - Si falta alguno de estos elementos → ALERTA URGENTE: "Se vulnera el Art. 67 CPP."
 
-7. INTERROGATORIO ESTRATÉGICO ("GRILL-ME" INTELIGENTE):
-- A partir de la Tipificación / Delito que se indique en el contexto, DEBES auditar que el acta contenga TODOS los elementos jurídicos (verbos rectores) para imputar dicho delito.
-- Si es "TID", es vital que exista el peso/cantidad, tipo de droga y embalaje. Si falta, haz una pregunta directa al efectivo policial.
-- Si es "Tenencia de Armas", es vital que exista el calibre, serie, y si estaba abastecida. Si falta, pregúntalo.
-- Si es "Peligro Común", es vital la descripción de los síntomas de ebriedad y la placa del vehículo.
-- Si es "Robo Agravado", es vital describir el nivel de violencia/amenaza y las especies sustraídas.
-- FORMULA ESTAS CARENCIAS COMO PREGUNTAS DIRECTAS (GRILL-ME) en tus observaciones tácticas (Ej. "Para imputar TID falta el peso exacto de la droga. ¿Cuál es el pesaje de los ketes hallados?").
+7. INTERROGATORIO ESTRATÉGICO GRILL-ME (según tipificación del delito):
+   - TID/Drogas: ¿peso exacto?, ¿tipo de sustancia?, ¿embalaje?, ¿dónde fue hallada (zona corporal o vehículo)?
+   - Tenencia Ilegal de Armas: ¿calibre?, ¿número de serie?, ¿estaba abastecida? ¿municiones?
+   - Peligro Común/Alcohol: ¿síntomas de ebriedad descritos?, ¿resultado de dosaje etílico o prueba de aliento?
+   - Robo Agravado: ¿descripción de la violencia?, ¿especies sustraídas con descripción y valor?, ¿agraviado identificado?
+   - Formula estas carencias como PREGUNTAS DIRECTAS en las observaciones_tacticas.
 
-FORMATO DE TU RESPUESTA:
-Tu respuesta debe ser un objeto JSON estricto con dos claves:
-1. "texto_auditado": El párrafo completamente corregido, técnico y listo para imprimirse en el PDF oficial.
-2. "observaciones_tacticas": Una lista breve (máximo 4 viñetas) indicando qué corregiste, o PREGUNTAS ESTRATÉGICAS si faltan datos esenciales para configurar el delito (Grill-Me).
+8. ⚠ REGLA CRÍTICA — DETECCIÓN DE VALORES TRIVIALES E INSUFICIENTES:
+   Esta es tu regla más importante. Un acta con campos triviales puede ser anulada en juicio.
+   
+   DEBES marcar como INVÁLIDO cualquier campo que contenga:
+   a) Texto de menos de 10 caracteres en campos narrativos o descriptivos.
+   b) Palabras aisladas sin contenido fáctico: "no", "sí", "si", "ok", "nada", "ninguno", "xxx", "...", "---".
+   c) Frases genéricas sin información verificable: "todo normal", "sin novedad", "no hay", "negativo" (cuando se usa como respuesta a qué sucedió), "no se encontró nada".
+   d) Repetición del nombre del campo como valor (ej. campo "Hechos" con valor "Hechos").
+   e) Texto que no describe hechos concretos, personas, lugares, objetos o acciones observables.
+   
+   ACCIÓN para valores triviales: incluir en observaciones_tacticas la alerta:
+   "⚠ ALERTA CAMPO INSUFICIENTE: El campo de '[nombre]' contiene solo '[valor trivial]'. Un acta policial válida requiere una descripción fáctica específica: quién, qué, cuándo, dónde y cómo. Este campo tal como está puede invalidar el acta. Ingrese información real y detallada."
+   
+   NUNCA intentes mejorar un valor trivial. Solo alerta al operador. En el "texto_auditado" sustitúyelo por: [⚠ CAMPO INCOMPLETO — INGRESE DESCRIPCIÓN REAL].
+
+9. REGLA ESPECIAL — CONSTANCIA DE FIRMA:
+   - Si el campo de negativa a firmar contiene: "NO se negó", "no hubo negativa", "firmó en conformidad", "firmó conforme", "firmó voluntariamente" o equivalentes → OMITE este campo por completo del texto_auditado y de las observaciones. No menciones la firma. El acta concluye normalmente.
+   - Solo incluye el campo de firma si el intervenido SE NEGÓ EXPRESAMENTE y se indica el motivo concreto de la negativa.
+
+═══════════════════════════════════════════════════
+FORMATO DE RESPUESTA — JSON ESTRICTO
+═══════════════════════════════════════════════════
+{
+  "texto_auditado": "El texto completo corregido, listo para PDF oficial. Sin campos triviales sin resolver.",
+  "observaciones_tacticas": [
+    "Viñeta 1: corrección aplicada o pregunta Grill-Me",
+    "Viñeta 2: alerta crítica o carencia legal detectada",
+    ...máximo 6 viñetas...
+  ]
+}
 ''';
 class AiAuditResult {
   final List<TextRevision> revisiones;
@@ -165,6 +194,7 @@ class AiTacticalService {
     String borrador, {
     String? typificationName,
     String? typificationLogic,
+    bool isRetry = false,
   }) async {
     if (borrador.trim().isEmpty) return null;
 
@@ -198,6 +228,15 @@ class AiTacticalService {
       );
 
       if (response.statusCode != 200) {
+        if (response.statusCode == 401 && !isRetry) {
+          await clearToken();
+          return pulirRedaccionLegal(
+            borrador,
+            typificationName: typificationName,
+            typificationLogic: typificationLogic,
+            isRetry: true,
+          );
+        }
         debugPrint('[AiTactical] pulirRedaccionLegal HTTP error: ${response.statusCode} - ${response.body}');
         return null;
       }
@@ -444,38 +483,69 @@ class AiTacticalService {
     if (apiKey == null || apiKey.isEmpty) return null;
 
     final instructions = """
-Eres el Auditor Experto de la Policía Nacional del Perú.
-Tu misión es auditar LOS VALORES que el efectivo policial ha ingresado en las etiquetas (tags) de su acta, garantizando la máxima objetividad, lenguaje técnico y legalidad.
+Eres el AUDITOR FORENSE de Documentación Policial de la Policía Nacional del Perú (PNP). Tu misión es evaluar con rigor máximo los valores ingresados en las etiquetas (tags) del acta, rechazando cualquier dato trivial, insuficiente o inválido que pueda anular el acta en juicio.
 
-# REGLAS ESTRICTAS DE AUDITORÍA (DOCPOL):
-1. **OBJETIVIDAD ABSOLUTA**: Elimina terminantemente frases subjetivas o juicios de valor. Prohibido usar "actitud sospechosa", "se puso nervioso", "delincuente". Reemplaza por la descripción fáctica: "mostró evasividad", "aceleró el paso".
-2. **FORMATOS NUMÉRICOS Y HORARIOS**: Usa reloj de 24h (ej. 06:00 horas). Cantidades incautadas en letras mayúsculas seguidas de números entre paréntesis (ej. DOSCIENTOS (200)). Fechas en formato DDMMMAAAA (ej. 15JUN2026).
-3. **PRECISIÓN LÉXICA**: Reemplaza coloquialismos (combi -> minibús, mototaxi -> trimóvil, moto lineal -> motocicleta).
-4. **REGLA DEL PARA-PARA**: Elimina menciones a elementos no encontrados ("para drogas negativo"). Solo documenta lo que efectivamente se halló.
-5. **IDENTIDAD Y SENTIDO**: Si el valor ingresado no tiene sentido (ej. "kjskjsj", "xxx"), identifícalo como campo inválido.
+═══════════════════════════════════════════════════════
+REGLAS DE EVALUACIÓN DOCPOL — APLICACIÓN ESTRICTA
+═══════════════════════════════════════════════════════
 
-El usuario te proporcionará un JSON con los valores actuales de las etiquetas (`tagValues`). Evalúa **cada valor** de este JSON.
+## REGLA 1 — OBJETIVIDAD ABSOLUTA
+Elimina frases subjetivas: "actitud sospechosa", "nervioso", "evasivo", "delincuente", "malandra".
+Reemplaza por hechos observables: "aceleró el paso", "intentó ocultar un objeto en la cintura".
 
-# TU TAREA:
-Genera un JSON con 2 arreglos:
-1. `revisiones`: Una lista de correcciones. Solo incluye los tags que NECESITAN ser modificados.
-2. `campos_invalidos`: Una lista con los nombres exactos de los tags cuyos valores son completamente absurdos ("xxx", "123") y no pueden ser inferidos o corregidos.
+## REGLA 2 — SIN NEGATIVOS (PARA-PARA)
+Elimina menciones a lo NO encontrado: "para drogas negativo", "sin armas", "no portaba objetos".
 
-# FORMATO DE RESPUESTA ESPERADO (JSON OBLIGATORIO):
+## REGLA 3 — PRECISIÓN LÉXICA TÉCNICA
+- Vehículos: "combi" → "microbús", "mototaxi" → "trimóvil", "moto lineal" → "motocicleta"
+- Armas: exigir tipo exacto, calibre, serie, si estaba abastecida
+- Drogas: tipo de sustancia + embalaje exacto ("envoltorios tipo kete")
+- Cantidades: LETRAS MAYÚSCULAS + número entre paréntesis: "QUINCE (15) envoltorios"
+
+## REGLA 4 — FORMATOS
+- Horario: 24 horas siempre (06:00, 23:45)
+- Fechas: DDMMMAAAA (15JUN2026)
+
+## REGLA 5 ⚠ CRÍTICA — RECHAZO DE VALORES TRIVIALES O INSUFICIENTES
+Esta regla tiene la máxima prioridad. Un acta con campos triviales puede ser anulada en juicio.
+
+DEBES identificar como CAMPO INVÁLIDO cualquier tag cuyo valor:
+a) Sea un texto de MENOS DE 10 CARACTERES en campos narrativos o descriptivos (hechos, precedentes, concomitantes, posteriores, motivos, circunstancias, etc.)
+b) Contenga SOLO estas palabras: "no", "sí", "si", "ok", "nada", "ninguno", "na", "n/a", "xxx", "...", "---", "N.A."
+c) Sea una frase genérica sin contenido fáctico verificable: "todo normal", "sin novedad", "no hay", "negativo" (como respuesta a qué ocurrió), "no se encontró", "no hubo nada"
+d) Repita el nombre del tag o sea texto placeholder genérico
+e) Sea texto sin hechos concretos: sin personas, sin lugares, sin objetos, sin acciones observables
+
+ACCIÓN para valores triviales:
+- Agregar en "revisiones" con razon: "⚠ CAMPO INSUFICIENTE: El valor '[valor]' no es válido para un acta policial. Se requiere descripción fáctica real (quién, qué, dónde, cuándo, cómo). Este campo como está puede ANULAR el acta ante el Ministerio Público."
+- El "valor_mejorado" debe ser: "[DATO INSUFICIENTE — COMPLETAR CON DESCRIPCIÓN REAL DE LOS HECHOS]"
+- También agregar el tag a "campos_invalidos"
+
+## REGLA 6 — CONSTANCIA DE FIRMA (CASO ESPECIAL)
+El tag "[firma.motivo_negativa]" es ESPECIAL:
+- Si su valor contiene: "NO se negó", "firmó en conformidad", "firmó conforme", "firmó voluntariamente", "firmó el acta" → IGNORAR COMPLETAMENTE. No incluir en revisiones ni en campos_invalidos.
+- Solo incluir si el valor indica que el intervenido SE NEGÓ expresamente a firmar.
+
+El usuario te proporcionará un JSON con los valores actuales de las etiquetas. Evalúa CADA valor.
+
+═══════════════════════════════════════════════════════
+FORMATO DE RESPUESTA — JSON OBLIGATORIO
+═══════════════════════════════════════════════════════
 {
   "revisiones": [
     {
       "tag": "[hecho.descripcion]",
-      "valor_original": "se puso saltón al ver el patrullero",
-      "valor_mejorado": "mostró evasividad y aceleró el paso al notar la presencia policial",
-      "razon": "Se eliminó la subjetividad 'saltón' por lenguaje objetivo."
+      "valor_original": "no",
+      "valor_mejorado": "[DATO INSUFICIENTE — COMPLETAR CON DESCRIPCIÓN REAL DE LOS HECHOS]",
+      "razon": "⚠ CAMPO INSUFICIENTE: El valor 'no' no es válido para un acta policial. Requiere descripción fáctica real."
     }
   ],
   "campos_invalidos": [
-    "[imputado.nombres]"
+    "[narrativa.precedente]"
   ]
 }
 """;
+
 
     try {
       final response = await http.post(
@@ -565,7 +635,7 @@ Genera un JSON con 2 arreglos:
 
   /// Audita el texto resuelto del Acta de Intervención.
   /// Retorna un objeto AuditResult compatible con la UI.
-  static Future<AuditResult?> auditarActaIntervencion(String textoResuelto) async {
+  static Future<AuditResult?> auditarActaIntervencion(String textoResuelto, {bool isRetry = false}) async {
     if (textoResuelto.trim().isEmpty) return null;
 
     final token = await getOrLoadToken();
@@ -590,6 +660,10 @@ Genera un JSON con 2 arreglos:
       );
 
       if (response.statusCode != 200) {
+        if (response.statusCode == 401 && !isRetry) {
+          await clearToken();
+          return auditarActaIntervencion(textoResuelto, isRetry: true);
+        }
         debugPrint('[AiTactical] auditarActaIntervencion HTTP error: ${response.statusCode}');
         return null;
       }
@@ -814,6 +888,124 @@ Genera un JSON con 2 arreglos:
       return null;
     }
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FUNCIÓN 8 — AUDITORÍA DE TEXTO COMPLETO CON TRACK CHANGES (Google Docs style)
+  // ══════════════════════════════════════════════════════════════════════════
+  /// Audits the resolved document text and returns paragraph-level diffs,
+  /// similar to Google Docs "Suggest edits" mode.
+  static Future<FullTextAuditResult?> auditarTextoCompletoConDiff(
+    String rawTemplate,
+    Map<String, String> tagValues, {
+    String? title,
+    String? customPrompt,
+    bool isRetry = false,
+  }) async {
+    if (rawTemplate.trim().isEmpty) return null;
+
+    final token = await getOrLoadToken();
+    if (token == null || token.isEmpty) return null;
+
+    final systemPrompt = '''
+Eres el AUDITOR FORENSE de la Policía Nacional del Perú (PNP), especialista en redacción de Actas Policiales según el Manual de Documentación Policial (DOCPOL). Tu misión es corregir, reorganizar y ordenar el texto del acta para que tenga una redacción fluida, técnica, profesional y estructurada.
+
+Se te proporcionará el TEXTO BASE de un documento policial${title != null ? ' titulado: "$title"' : ''}.
+
+REGLAS DE CORRECCIÓN DOCPOL (CRÍTICAS):
+1. TÍTULO CENTRADO Y MAYÚSCULAS: La denominación del acta (título principal) debe estar escrita íntegramente en letras MAYÚSCULAS. Para simular el centrado en texto plano, añade aproximadamente 15 a 20 espacios en blanco antes del título. Ejemplo: "               ACTA DE INTERVENCIÓN POLICIAL".
+2. TERCERA PERSONA Y OBJETIVIDAD: Redacta en tercera persona impersonal ("el instructor procedió", "se constató"). Elimina juicios de valor subjetivos ("actitud sospechosa", "nervioso", "evasivo"). Reemplaza por hechos observables. Prohibido usar extranjerismos que no sean técnicos.
+3. NUNCA ELIMINES LOS DATOS DEL INSTRUCTOR: Es un error gravísimo eliminar el nombre del instructor policial, su grado, CIP, comisaría o jurisdicción. MANTÉN intactos todos estos datos identificatorios.
+4. REGLA PARA-PARA (CERO NEGATIVOS): Elimina menciones de descartes de delitos o búsquedas infructuosas (ej. "para drogas negativo", "sin novedad"). Solo documenta lo que SÍ se encontró o incautó.
+5. PRECISIÓN TÉCNICA Y LÉXICA: Emplea términos exactos: "microbús" (no combi), "trimóvil" (no mototaxi), "motocicleta" (no moto lineal), "vehículo categoría M1".
+6. CANTIDADES: Siempre escribe las cantidades numéricas primero en LETRAS MAYÚSCULAS seguidas del número entre paréntesis. Ej: "DOSCIENTOS CINCUENTA (250) soles". Excepción: no aplica a fechas, horas o DNI.
+7. FORMATO DE FECHAS Y HORAS: Estandariza fechas con el formato de dos dígitos para el día, tres primeras letras del mes en mayúsculas y cuatro dígitos para el año (ej. "08MAY2025" o "07JUL2026"). Las horas DEBEN usar el reloj militar de 24 horas y terminar con la palabra "horas" (ej. "21:19 horas", "06:07 horas").
+8. SECUENCIA AMERICANA: Al estructurar párrafos, usa el orden descendente: I. (Romano), A. (Letra mayúscula), 1. (Número), a. (Letra minúscula).
+9. COHERENCIA LEGAL SEGÚN EL TÍTULO: 
+   - Si es "Acta de Intervención Policial": Prohibido consignar dichos o confesiones ("el imputado aceptó"). Solo hechos objetivos.
+   - Si es "Acta de Registro/Incautación": Las armas se incautan (susceptibles a devolución), la droga/dinero ilícito se comisan.
+10. ERRADICACIÓN DE DATOS ABSURDOS O DE RELLENO: Aplica el Principio de Veracidad y Claridad. Si encuentras palabras sin sentido, de prueba, relleno (ej. "test", "xxx", "asd") o datos genéricos incompletos, corrígelos, elimínalos o reescríbelos exigiendo completitud, indicando en tu razón que la "basura digital" es causal de nulidad procesal.
+
+${customPrompt != null && customPrompt.trim().isNotEmpty ? 'INSTRUCCIÓN ADICIONAL DEL USUARIO:\nEl usuario ha solicitado lo siguiente: "$customPrompt"\nPor favor, asegúrate de aplicar esta solicitud junto con las reglas anteriores.\n\n' : ''}INSTRUCCIÓN DE RESPUESTA:
+Devuelve OBLIGATORIAMENTE este JSON:
+{
+  "diffs": [
+    {
+      "original": "párrafo exacto del texto base que debe cambiar",
+      "mejorado": "versión corregida y reorganizada",
+      "razon": "explicación concisa del cambio aplicado"
+    }
+  ],
+  "texto_completo": "el texto base completo ya con TODAS las correcciones aplicadas",
+  "nota": "resumen ejecutivo de los cambios realizados"
+}
+
+IMPORTANTE:
+- El "original" debe ser una cita exacta del texto base recibido.
+- Máximo 15 diffs por auditoría. Reorganiza y agrupa párrafos si es necesario para que el acta se vea profesional.
+''';
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        body: jsonEncode({
+          'model': _kModel,
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': 'Texto base del acta:\n$rawTemplate'},
+          ],
+          'temperature': 0.1,
+          'max_tokens': 4000,
+          'response_format': {'type': 'json_object'},
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        var content = data['choices'][0]['message']['content'] as String? ?? '';
+        content = content.trim();
+        if (content.startsWith('```json')) {
+          content = content.replaceFirst('```json', '');
+        } else if (content.startsWith('```')) {
+          content = content.replaceFirst('```', '');
+        }
+        if (content.endsWith('```')) {
+          content = content.substring(0, content.length - 3);
+        }
+        content = content.trim();
+        final parsed = jsonDecode(content) as Map<String, dynamic>;
+
+        final diffList = (parsed['diffs'] as List<dynamic>? ?? [])
+            .map((e) => DocTextDiff(
+                  original: e['original']?.toString() ?? '',
+                  mejorado: e['mejorado']?.toString() ?? '',
+                  razon: e['razon']?.toString() ?? '',
+                ))
+            .where((d) => d.original.isNotEmpty && d.mejorado.isNotEmpty)
+            .toList();
+
+        return FullTextAuditResult(
+          diffs: diffList,
+          textoCompleto: parsed['texto_completo']?.toString() ?? rawTemplate,
+          nota: parsed['nota']?.toString() ?? '',
+        );
+      } else if (response.statusCode == 401 && !isRetry) {
+        await clearToken();
+        return auditarTextoCompletoConDiff(rawTemplate, tagValues, isRetry: true);
+      } else {
+        final errorMsg = 'HTTP ${response.statusCode}: ${response.body}';
+        debugPrint('[AiTactical] auditarTextoCompletoConDiff error: $errorMsg');
+        throw Exception(errorMsg);
+      }
+    } catch (e) {
+      debugPrint('[AiTactical] auditarTextoCompletoConDiff exception: $e');
+      throw Exception('Fallo en el modelo IA: $e');
+    }
+  }
 }
 
 // ─── Modelo de resultado de auditoría ───────────────────────────────────────
@@ -884,7 +1076,7 @@ class AuditMaestroResult {
 class TextRevision {
   final String tag;
   final String original;
-  final String mejorado;
+  String mejorado;
   final String razon;
 
   TextRevision({
@@ -892,5 +1084,36 @@ class TextRevision {
     required this.original, 
     required this.mejorado, 
     required this.razon
+  });
+}
+
+// ─── Resultado de auditoría de texto completo con diffs ──────────────────────
+class DocTextDiff {
+  /// The original paragraph/block text
+  final String original;
+  /// The AI-improved version
+  String mejorado;
+  /// Explanation of what was changed
+  final String razon;
+
+  DocTextDiff({
+    required this.original,
+    required this.mejorado,
+    required this.razon,
+  });
+}
+
+class FullTextAuditResult {
+  /// All diffs (only changed paragraphs)
+  final List<DocTextDiff> diffs;
+  /// Full improved text (for "accept all")
+  final String textoCompleto;
+  /// AI summary note
+  final String nota;
+
+  FullTextAuditResult({
+    required this.diffs,
+    required this.textoCompleto,
+    required this.nota,
   });
 }
