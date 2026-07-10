@@ -97,6 +97,7 @@ FORMATO DE RESPUESTA — JSON ESTRICTO
   ]
 }
 ''';
+
 class AiAuditResult {
   final List<TextRevision> revisiones;
   final List<String> camposInvalidos;
@@ -150,36 +151,39 @@ class AiTacticalService {
   /// Valida una API Key realizando un "ping" a la API de Groq.
   static Future<bool> validarToken(String token) async {
     try {
-      final response = await http.post(
-        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        body: json.encode({
-          'model': _kModel,
-          'messages': [
-            {'role': 'user', 'content': 'OK'}
-          ],
-          'max_tokens': 5,
-        }),
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .post(
+            Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            },
+            body: json.encode({
+              'model': _kModel,
+              'messages': [
+                {'role': 'user', 'content': 'OK'},
+              ],
+              'max_tokens': 5,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       // 200 significa OK. 429 significa límite de cuota excedido, pero indica que la API key es válida.
       if (response.statusCode == 200 || response.statusCode == 429) {
         return true;
       }
-      
+
       final bodyText = response.body.toLowerCase();
-      if (bodyText.contains('api_key_invalid') || 
+      if (bodyText.contains('api_key_invalid') ||
           bodyText.contains('api key not valid') ||
           bodyText.contains('unauthenticated') ||
           bodyText.contains('invalid authentication') ||
           bodyText.contains('unauthorized')) {
         return false;
       }
-      
+
       return false;
     } catch (e) {
       debugPrint('[AiTactical] validarToken caught exception: $e');
@@ -204,7 +208,8 @@ class AiTacticalService {
     try {
       String systemPrompt = _kSystemPromptMaestro;
       if (typificationName != null && typificationName.isNotEmpty) {
-        systemPrompt += '\n\n=== CONTEXTO DEL DELITO / TIPIFICACIÓN ===\n'
+        systemPrompt +=
+            '\n\n=== CONTEXTO DEL DELITO / TIPIFICACIÓN ===\n'
             'El delito o motivo de la intervención es: "$typificationName".\n'
             'Lógica jurídica / Enfoque procesal: "${typificationLogic ?? ''}"\n'
             'Por favor, audita el acta y formula tus "observaciones_tacticas" (Grill-Me) considerando estrictamente los elementos clave necesarios para imputar este delito específico (ej: alcoholemia si es peligro común; violencia/amenaza y especies sustraídas si es robo; embalaje y lacrado si es TID).';
@@ -215,13 +220,14 @@ class AiTacticalService {
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: json.encode({
           'model': _kModel,
           'messages': [
             {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': borrador}
+            {'role': 'user', 'content': borrador},
           ],
           'temperature': 0.1,
         }),
@@ -237,7 +243,9 @@ class AiTacticalService {
             isRetry: true,
           );
         }
-        debugPrint('[AiTactical] pulirRedaccionLegal HTTP error: ${response.statusCode} - ${response.body}');
+        debugPrint(
+          '[AiTactical] pulirRedaccionLegal HTTP error: ${response.statusCode} - ${response.body}',
+        );
         return null;
       }
 
@@ -337,7 +345,8 @@ class AiTacticalService {
       final token = await getOrLoadToken();
       if (token != null && token.isNotEmpty) {
         try {
-          final systemPrompt = 'Eres un intérprete judicial certificado. '
+          final systemPrompt =
+              'Eres un intérprete judicial certificado. '
               'Traduce el siguiente texto legal al idioma "$idioma" de forma precisa y comprensible. '
               'Si el idioma es Quechua, usa el quechua sureño (Quechua Chanka/Ayacuchano). '
               'Si el idioma es Aymara, usa el aymara boliviano-peruano estándar. '
@@ -348,13 +357,14 @@ class AiTacticalService {
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
             body: json.encode({
               'model': _kModel,
               'messages': [
                 {'role': 'system', 'content': systemPrompt},
-                {'role': 'user', 'content': _art71Espanol}
+                {'role': 'user', 'content': _art71Espanol},
               ],
               'temperature': 0.1,
             }),
@@ -362,7 +372,8 @@ class AiTacticalService {
 
           if (response.statusCode == 200) {
             final resBody = json.decode(utf8.decode(response.bodyBytes));
-            final rawText = resBody['choices'][0]['message']['content'] as String?;
+            final rawText =
+                resBody['choices'][0]['message']['content'] as String?;
             if (rawText != null && rawText.isNotEmpty) {
               textoFinal = rawText.trim();
             }
@@ -406,7 +417,9 @@ class AiTacticalService {
   /// "II. AMPLIACIÓN DETALLADA" del Parte Policial (Formato 61).
   ///
   /// Retorna el texto del resumen o [null] si falla.
-  static Future<String?> sintetizarPartePolicial(Map<String, String> tags) async {
+  static Future<String?> sintetizarPartePolicial(
+    Map<String, String> tags,
+  ) async {
     // Construir texto de contexto con los tags más relevantes
     final sb = StringBuffer();
     sb.writeln('=== DATOS DE LA INTERVENCIÓN ===');
@@ -441,7 +454,8 @@ class AiTacticalService {
     if (token == null || token.isEmpty) return null;
 
     try {
-      final systemPrompt = 'Eres un redactor policial experto del Ministerio del Interior del Peru. '
+      final systemPrompt =
+          'Eres un redactor policial experto del Ministerio del Interior del Peru. '
           'Lee los datos de la intervencion adjuntos y redacta un resumen ejecutivo '
           'de MAXIMO 3 parrafos para la seccion "II. AMPLIACION DETALLADA" del Parte Policial '
           '(Formato 61 PNP). '
@@ -456,13 +470,14 @@ class AiTacticalService {
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: json.encode({
           'model': _kModel,
           'messages': [
             {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': contexto}
+            {'role': 'user', 'content': contexto},
           ],
           'temperature': 0.1,
         }),
@@ -476,48 +491,50 @@ class AiTacticalService {
     return null;
   }
 
-
-
-  static Future<AiAuditResult?> mejorarTextoCompleto(String actaText, Map<String, String> tagValues) async {
+  static Future<AiAuditResult?> mejorarTextoCompleto(
+    String actaText,
+    Map<String, String> tagValues,
+  ) async {
     final apiKey = await getOrLoadToken();
     if (apiKey == null || apiKey.isEmpty) return null;
 
     final instructions = """
-Eres el AUDITOR FORENSE de Documentación Policial de la Policía Nacional del Perú (PNP). Tu misión es evaluar con rigor máximo los valores ingresados en las etiquetas (tags) del acta, rechazando cualquier dato trivial, insuficiente o inválido que pueda anular el acta en juicio.
+Eres el AUDITOR FORENSE de Documentación Policial de la Policía Nacional del Perú (PNP). Tu misión es evaluar con rigor máximo los valores ingresados en las etiquetas (tags) del acta, rechazando cualquier dato trivial, insuficiente, absurdo o inválido que pueda anular el acta en juicio.
 
 ═══════════════════════════════════════════════════════
 REGLAS DE EVALUACIÓN DOCPOL — APLICACIÓN ESTRICTA
 ═══════════════════════════════════════════════════════
 
-## REGLA 1 — OBJETIVIDAD ABSOLUTA
+## REGLA 1 — FORMATO Y LIMPIEZA
+- NO DEBES INCLUIR NINGUNA ETIQUETA HTML (como <u>, <b>, <i>, <br>) ni Markdown (como **, _, #) en tu respuesta. El texto mejorado debe ser TEXTO PLANO y LIMPIO.
+- Horario: 24 horas siempre (06:00, 23:45)
+- Fechas: DDMMMAAAA (15JUN2026)
+
+## REGLA 2 — OBJETIVIDAD ABSOLUTA
 Elimina frases subjetivas: "actitud sospechosa", "nervioso", "evasivo", "delincuente", "malandra".
 Reemplaza por hechos observables: "aceleró el paso", "intentó ocultar un objeto en la cintura".
 
-## REGLA 2 — SIN NEGATIVOS (PARA-PARA)
+## REGLA 3 — SIN NEGATIVOS (PARA-PARA)
 Elimina menciones a lo NO encontrado: "para drogas negativo", "sin armas", "no portaba objetos".
 
-## REGLA 3 — PRECISIÓN LÉXICA TÉCNICA
+## REGLA 4 — PRECISIÓN LÉXICA TÉCNICA
 - Vehículos: "combi" → "microbús", "mototaxi" → "trimóvil", "moto lineal" → "motocicleta"
 - Armas: exigir tipo exacto, calibre, serie, si estaba abastecida
 - Drogas: tipo de sustancia + embalaje exacto ("envoltorios tipo kete")
 - Cantidades: LETRAS MAYÚSCULAS + número entre paréntesis: "QUINCE (15) envoltorios"
 
-## REGLA 4 — FORMATOS
-- Horario: 24 horas siempre (06:00, 23:45)
-- Fechas: DDMMMAAAA (15JUN2026)
-
-## REGLA 5 ⚠ CRÍTICA — RECHAZO DE VALORES TRIVIALES O INSUFICIENTES
+## REGLA 5 ⚠ CRÍTICA — RECHAZO DE VALORES ABSURDOS, TONTOS O INSUFICIENTES
 Esta regla tiene la máxima prioridad. Un acta con campos triviales puede ser anulada en juicio.
 
 DEBES identificar como CAMPO INVÁLIDO cualquier tag cuyo valor:
-a) Sea un texto de MENOS DE 10 CARACTERES en campos narrativos o descriptivos (hechos, precedentes, concomitantes, posteriores, motivos, circunstancias, etc.)
-b) Contenga SOLO estas palabras: "no", "sí", "si", "ok", "nada", "ninguno", "na", "n/a", "xxx", "...", "---", "N.A."
-c) Sea una frase genérica sin contenido fáctico verificable: "todo normal", "sin novedad", "no hay", "negativo" (como respuesta a qué ocurrió), "no se encontró", "no hubo nada"
-d) Repita el nombre del tag o sea texto placeholder genérico
-e) Sea texto sin hechos concretos: sin personas, sin lugares, sin objetos, sin acciones observables
+a) Sea un texto de MENOS DE 10 CARACTERES en campos narrativos (hechos, precedentes, concomitantes, posteriores, motivos, circunstancias).
+b) Contenga texto sin sentido, tonto o indique ausencia de datos como: "no", "sí", "si", "ok", "nada", "ninguno", "na", "n/a", "xxx", "...", "---", "N.A.", "test", "prueba", "vacio", "null", "0".
+c) Sea una frase genérica sin contenido fáctico verificable: "todo normal", "sin novedad", "no hay", "negativo" (como respuesta a qué ocurrió), "no se encontró", "no hubo nada".
+d) Repita el nombre del tag o sea texto placeholder genérico.
+e) Sea texto sin hechos concretos: sin personas, sin lugares, sin objetos, sin acciones observables.
 
-ACCIÓN para valores triviales:
-- Agregar en "revisiones" con razon: "⚠ CAMPO INSUFICIENTE: El valor '[valor]' no es válido para un acta policial. Se requiere descripción fáctica real (quién, qué, dónde, cuándo, cómo). Este campo como está puede ANULAR el acta ante el Ministerio Público."
+ACCIÓN para valores triviales/absurdos:
+- Agregar en "revisiones" con razon: "⚠ DATO ABSURDO/INSUFICIENTE: El valor '[valor]' no es válido para un acta policial. Se requiere descripción fáctica real. Este campo como está puede ANULAR el acta."
 - El "valor_mejorado" debe ser: "[DATO INSUFICIENTE — COMPLETAR CON DESCRIPCIÓN REAL DE LOS HECHOS]"
 - También agregar el tag a "campos_invalidos"
 
@@ -526,7 +543,7 @@ El tag "[firma.motivo_negativa]" es ESPECIAL:
 - Si su valor contiene: "NO se negó", "firmó en conformidad", "firmó conforme", "firmó voluntariamente", "firmó el acta" → IGNORAR COMPLETAMENTE. No incluir en revisiones ni en campos_invalidos.
 - Solo incluir si el valor indica que el intervenido SE NEGÓ expresamente a firmar.
 
-El usuario te proporcionará un JSON con los valores actuales de las etiquetas. Evalúa CADA valor.
+El usuario te proporcionará un JSON con los valores actuales de las etiquetas. Evalúa CADA valor y APLICA TODAS LAS REGLAS (especialmente la Regla 1 y Regla 5).
 
 ═══════════════════════════════════════════════════════
 FORMATO DE RESPUESTA — JSON OBLIGATORIO
@@ -546,7 +563,6 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
 }
 """;
 
-
     try {
       final response = await http.post(
         Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
@@ -558,12 +574,14 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
           "model": _kModel,
           "messages": [
             {"role": "system", "content": instructions},
-            {"role": "user", "content": "Audita estos valores y devuélveme el JSON:\\n\\n${jsonEncode(tagValues)}"}
+            {
+              "role": "user",
+              "content":
+                  "Audita estos valores y devuélveme el JSON:\\n\\n${jsonEncode(tagValues)}",
+            },
           ],
-          "temperature": 0.2, 
-          "response_format": {
-            "type": "json_object"
-          }
+          "temperature": 0.2,
+          "response_format": {"type": "json_object"},
         }),
       );
 
@@ -573,20 +591,26 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
         final parsed = jsonDecode(content);
         final list = parsed['revisiones'] as List<dynamic>? ?? [];
         final invalidos = parsed['campos_invalidos'] as List<dynamic>? ?? [];
-        
-        final revisiones = list.map((e) => TextRevision(
-          tag: e['tag'] ?? '',
-          original: e['valor_original'] ?? '',
-          mejorado: e['valor_mejorado'] ?? '',
-          razon: e['razon'] ?? 'Corrección táctica.',
-        )).toList();
-        
+
+        final revisiones = list
+            .map(
+              (e) => TextRevision(
+                tag: e['tag'] ?? '',
+                original: e['valor_original'] ?? '',
+                mejorado: e['valor_mejorado'] ?? '',
+                razon: e['razon'] ?? 'Corrección táctica.',
+              ),
+            )
+            .toList();
+
         return AiAuditResult(
           revisiones: revisiones,
           camposInvalidos: invalidos.map((e) => e.toString()).toList(),
         );
       } else {
-        debugPrint('[AiTactical] mejorarTextoCompleto HTTP error: ${response.statusCode}');
+        debugPrint(
+          '[AiTactical] mejorarTextoCompleto HTTP error: ${response.statusCode}',
+        );
         debugPrint('[AiTactical] Response body: ${response.body}');
       }
     } catch (e) {
@@ -596,12 +620,16 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
   }
 
   /// Sugiere cómo llenar los campos faltantes de un acta.
-  static Future<String?> sugerirCompletadoFaltantes(List<String> faltantes, String typificationName) async {
+  static Future<String?> sugerirCompletadoFaltantes(
+    List<String> faltantes,
+    String typificationName,
+  ) async {
     final token = await getOrLoadToken();
     if (token == null || token.isEmpty) return null;
 
     try {
-      final systemPrompt = 'Eres un experto Instructor Policial de la Policía Nacional del Perú (PNP). '
+      final systemPrompt =
+          'Eres un experto Instructor Policial de la Policía Nacional del Perú (PNP). '
           'El usuario está redactando un Acta de Intervención por el delito/infracción: "$typificationName", '
           'pero le faltan llenar los siguientes campos esenciales:\n'
           '${faltantes.map((f) => "- $f").join("\n")}\n\n'
@@ -613,13 +641,17 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: json.encode({
           'model': _kModel,
           'messages': [
             {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': 'Dame tus sugerencias para los campos faltantes.'}
+            {
+              'role': 'user',
+              'content': 'Dame tus sugerencias para los campos faltantes.',
+            },
           ],
           'temperature': 0.3,
         }),
@@ -635,7 +667,10 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
 
   /// Audita el texto resuelto del Acta de Intervención.
   /// Retorna un objeto AuditResult compatible con la UI.
-  static Future<AuditResult?> auditarActaIntervencion(String textoResuelto, {bool isRetry = false}) async {
+  static Future<AuditResult?> auditarActaIntervencion(
+    String textoResuelto, {
+    bool isRetry = false,
+  }) async {
     if (textoResuelto.trim().isEmpty) return null;
 
     final token = await getOrLoadToken();
@@ -647,13 +682,14 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: json.encode({
           'model': _kModel,
           'messages': [
             {'role': 'system', 'content': _kSystemPromptMaestro},
-            {'role': 'user', 'content': textoResuelto}
+            {'role': 'user', 'content': textoResuelto},
           ],
           'temperature': 0.1,
         }),
@@ -664,7 +700,9 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
           await clearToken();
           return auditarActaIntervencion(textoResuelto, isRetry: true);
         }
-        debugPrint('[AiTactical] auditarActaIntervencion HTTP error: ${response.statusCode}');
+        debugPrint(
+          '[AiTactical] auditarActaIntervencion HTTP error: ${response.statusCode}',
+        );
         return null;
       }
 
@@ -687,11 +725,14 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
         final List<AuditIssue> issues = [];
         agrupadas.forEach((tag, listaObs) {
           final problema = listaObs.map((obs) => '• $obs').join('\n');
-          issues.add(AuditIssue(
-            tag: tag,
-            problema: problema,
-            correccion: 'Revisa y edita el valor de este campo en base a las observaciones del Perito IA.',
-          ));
+          issues.add(
+            AuditIssue(
+              tag: tag,
+              problema: problema,
+              correccion:
+                  'Revisa y edita el valor de este campo en base a las observaciones del Perito IA.',
+            ),
+          );
         });
 
         return AuditResult(
@@ -711,7 +752,8 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
       String clean = rawContent.trim();
       if (clean.startsWith('```')) {
         final lines = clean.split('\n');
-        if (lines.first.startsWith('```json') || lines.first.startsWith('```')) {
+        if (lines.first.startsWith('```json') ||
+            lines.first.startsWith('```')) {
           lines.removeAt(0);
         }
         if (lines.isNotEmpty && lines.last.startsWith('```')) {
@@ -728,22 +770,43 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
 
   static String _inferirTagDesdeObservacion(String observacion) {
     final obs = observacion.toLowerCase();
-    if (obs.contains('fecha') || obs.contains('mes') || obs.contains('año') || obs.contains('jun') || obs.contains('2026')) {
+    if (obs.contains('fecha') ||
+        obs.contains('mes') ||
+        obs.contains('año') ||
+        obs.contains('jun') ||
+        obs.contains('2026')) {
       return '[tiempo.fecha_intervencion]';
     }
-    if (obs.contains('hora') || obs.contains('horario') || obs.contains('24h') || obs.contains('tiempo')) {
+    if (obs.contains('hora') ||
+        obs.contains('horario') ||
+        obs.contains('24h') ||
+        obs.contains('tiempo')) {
       return '[tiempo.acta_hora_inicio]';
     }
-    if (obs.contains('combi') || obs.contains('mototaxi') || obs.contains('moto lineal') || obs.contains('trimóvil') || obs.contains('vehículo') || obs.contains('placa')) {
+    if (obs.contains('combi') ||
+        obs.contains('mototaxi') ||
+        obs.contains('moto lineal') ||
+        obs.contains('trimóvil') ||
+        obs.contains('vehículo') ||
+        obs.contains('placa')) {
       return '[vehiculo.placa]';
     }
-    if (obs.contains('droga') || obs.contains('envoltorio') || obs.contains('kete') || obs.contains('incaut')) {
+    if (obs.contains('droga') ||
+        obs.contains('envoltorio') ||
+        obs.contains('kete') ||
+        obs.contains('incaut')) {
       return '[registro.bienes_detalle]';
     }
-    if (obs.contains('arma') || obs.contains('pistola') || obs.contains('revólver')) {
+    if (obs.contains('arma') ||
+        obs.contains('pistola') ||
+        obs.contains('revólver')) {
       return '[arma.descripcion]';
     }
-    if (obs.contains('fiscal') || obs.contains('art. 67') || obs.contains('artículo 67') || obs.contains('llamó') || obs.contains('comunicación')) {
+    if (obs.contains('fiscal') ||
+        obs.contains('art. 67') ||
+        obs.contains('artículo 67') ||
+        obs.contains('llamó') ||
+        obs.contains('comunicación')) {
       return '[intervencion.requiere_fiscal]';
     }
     return '[narrativa.hechos]';
@@ -754,7 +817,8 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
       String clean = rawContent.trim();
       if (clean.startsWith('```')) {
         final lines = clean.split('\n');
-        if (lines.first.startsWith('```json') || lines.first.startsWith('```')) {
+        if (lines.first.startsWith('```json') ||
+            lines.first.startsWith('```')) {
           lines.removeAt(0);
         }
         if (lines.isNotEmpty && lines.last.startsWith('```')) {
@@ -764,7 +828,9 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
       }
       final decoded = json.decode(clean);
       if (decoded is List) {
-        return decoded.map((item) => AuditIssue.fromJson(item as Map<String, dynamic>)).toList();
+        return decoded
+            .map((item) => AuditIssue.fromJson(item as Map<String, dynamic>))
+            .toList();
       }
     } catch (e) {
       debugPrint('[AiTactical] Error parsing JSON audit: $e');
@@ -825,6 +891,7 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
         sb.writeln('$etiqueta: $val');
       }
     }
+
     aniadir('Narrativa hechos', '[narrativa.hechos]');
     aniadir('Bienes incautados', '[registro.bienes_detalle]');
     aniadir('Tipo de delito', '[delito.tipificacion]');
@@ -835,7 +902,8 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
     if (token == null || token.isEmpty) return null;
 
     try {
-      final systemPrompt = 'Eres un auditor legal experto en documentación policial peruana (PNP).\n'
+      final systemPrompt =
+          'Eres un auditor legal experto en documentación policial peruana (PNP).\n'
           'Revisa el expediente policial y reporta los problemas críticos.\n'
           'Debes devolver la respuesta en formato JSON estrictamente, que consista en una lista de objetos. Cada objeto debe tener exactamente estas tres claves:\n'
           '- "tag": el tag original de la plantilla asociado al error (por ejemplo, "[narrativa.hechos]", "[tiempo.acta_hora_inicio]"). Si es un error general o de actas faltantes, usa "general".\n'
@@ -848,29 +916,34 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
           'Si el expediente está apto para exportar, devuelve una lista vacía: [].\n'
           'No devuelvas ningún comentario, explicación ni bloque de Markdown fuera del JSON.';
 
-      final prompt = contexto + (camposVacios.isNotEmpty
-          ? '\n\n=== CAMPOS CRÍTICOS VACÍOS ===\n${camposVacios.join('\n')}'
-          : '');
+      final prompt =
+          contexto +
+          (camposVacios.isNotEmpty
+              ? '\n\n=== CAMPOS CRÍTICOS VACÍOS ===\n${camposVacios.join('\n')}'
+              : '');
 
       final response = await http.post(
         Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
         body: json.encode({
           'model': _kModel,
           'messages': [
             {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': prompt}
+            {'role': 'user', 'content': prompt},
           ],
           'temperature': 0.1,
         }),
       );
 
       if (response.statusCode != 200) {
-        debugPrint('[AiTactical] auditarSesionCompleta HTTP error: ${response.statusCode}');
+        debugPrint(
+          '[AiTactical] auditarSesionCompleta HTTP error: ${response.statusCode}',
+        );
         return null;
       }
 
@@ -907,41 +980,52 @@ FORMATO DE RESPUESTA — JSON OBLIGATORIO
     if (token == null || token.isEmpty) return null;
 
     final systemPrompt = '''
-Eres el AUDITOR FORENSE de la Policía Nacional del Perú (PNP), especialista en redacción de Actas Policiales según el Manual de Documentación Policial (DOCPOL). Tu misión es corregir, reorganizar y ordenar el texto del acta para que tenga una redacción fluida, técnica, profesional y estructurada.
+Eres el AUDITOR FORENSE DOCPOL de la Policía Nacional del Perú. Revisas actas policiales con máxima exigencia. A continuación recibes el TEXTO COMPLETO de un acta${title != null ? ' titulada "$title"' : ''}.
 
-Se te proporcionará el TEXTO BASE de un documento policial${title != null ? ' titulado: "$title"' : ''}.
+Tu tarea tiene DOS FASES OBLIGATORIAS. Ejecuta las dos antes de responder:
 
-REGLAS DE CORRECCIÓN DOCPOL (CRÍTICAS):
-1. TÍTULO CENTRADO Y MAYÚSCULAS: La denominación del acta (título principal) debe estar escrita íntegramente en letras MAYÚSCULAS. Para simular el centrado en texto plano, añade aproximadamente 15 a 20 espacios en blanco antes del título. Ejemplo: "               ACTA DE INTERVENCIÓN POLICIAL".
-2. TERCERA PERSONA Y OBJETIVIDAD: Redacta en tercera persona impersonal ("el instructor procedió", "se constató"). Elimina juicios de valor subjetivos ("actitud sospechosa", "nervioso", "evasivo"). Reemplaza por hechos observables. Prohibido usar extranjerismos que no sean técnicos.
-3. NUNCA ELIMINES LOS DATOS DEL INSTRUCTOR: Es un error gravísimo eliminar el nombre del instructor policial, su grado, CIP, comisaría o jurisdicción. MANTÉN intactos todos estos datos identificatorios.
-4. REGLA PARA-PARA (CERO NEGATIVOS): Elimina menciones de descartes de delitos o búsquedas infructuosas (ej. "para drogas negativo", "sin novedad"). Solo documenta lo que SÍ se encontró o incautó.
-5. PRECISIÓN TÉCNICA Y LÉXICA: Emplea términos exactos: "microbús" (no combi), "trimóvil" (no mototaxi), "motocicleta" (no moto lineal), "vehículo categoría M1".
-6. CANTIDADES: Siempre escribe las cantidades numéricas primero en LETRAS MAYÚSCULAS seguidas del número entre paréntesis. Ej: "DOSCIENTOS CINCUENTA (250) soles". Excepción: no aplica a fechas, horas o DNI.
-7. FORMATO DE FECHAS Y HORAS: Estandariza fechas con el formato de dos dígitos para el día, tres primeras letras del mes en mayúsculas y cuatro dígitos para el año (ej. "08MAY2025" o "07JUL2026"). Las horas DEBEN usar el reloj militar de 24 horas y terminar con la palabra "horas" (ej. "21:19 horas", "06:07 horas").
-8. SECUENCIA AMERICANA: Al estructurar párrafos, usa el orden descendente: I. (Romano), A. (Letra mayúscula), 1. (Número), a. (Letra minúscula).
-9. COHERENCIA LEGAL SEGÚN EL TÍTULO: 
-   - Si es "Acta de Intervención Policial": Prohibido consignar dichos o confesiones ("el imputado aceptó"). Solo hechos objetivos.
-   - Si es "Acta de Registro/Incautación": Las armas se incautan (susceptibles a devolución), la droga/dinero ilícito se comisan.
-10. ERRADICACIÓN DE DATOS ABSURDOS O DE RELLENO: Aplica el Principio de Veracidad y Claridad. Si encuentras palabras sin sentido, de prueba, relleno (ej. "test", "xxx", "asd") o datos genéricos incompletos, corrígelos, elimínalos o reescríbelos exigiendo completitud, indicando en tu razón que la "basura digital" es causal de nulidad procesal.
+═══ FASE 1: DETECTOR DE BASURA DIGITAL (PRIORIDAD ABS0LUTA) ═══
+Lee el texto línea por línea y detecta CUALQUIER contenido inaceptable:
+► Datos vacíos o sin sentido: "NADA", "SIN DATOS", "N/A", "XXX", "---", "0", "test", "prueba"
+► Texto vulgar, chiste o broma: groserías, expresiones escatológicas, insultos, lenguaje informal
+► Nombre de lugar ficticio o burla: "LAZY TOWN", "Springfield", o cualquier nombre que claramente no sea un lugar real de Perú
+► Apodo o mote en lugar de nombre: "FLACO", "EL GORDO", "CHATO", etc. en campos de descripción física más allá de lo mínimo requerido
 
-${customPrompt != null && customPrompt.trim().isNotEmpty ? 'INSTRUCCIÓN ADICIONAL DEL USUARIO:\nEl usuario ha solicitado lo siguiente: "$customPrompt"\nPor favor, asegúrate de aplicar esta solicitud junto con las reglas anteriores.\n\n' : ''}INSTRUCCIÓN DE RESPUESTA:
-Devuelve OBLIGATORIAMENTE este JSON:
+POR CADA hallazgo de la Fase 1 DEBES crear un diff con:
+- "original": la línea o frase exacta del texto (COPIAR LITERAL sin cambiar ni un carácter)
+- "mejorado": "[ALERTA DOCPOL: DATO INVÁLIDO - {descripción breve del problema}. REQUIERE INFORMACIÓN REAL Y VERIFICABLE.]"
+- "razon": una reprimenda severa indicando que ese dato es causal de NULIDAD PROCESAL del acta
+
+═══ FASE 2: CORRECCIONES DE REDACCIÓN DOCPOL ═══
+Luego de la Fase 1, aplica estas correcciones al resto del texto:
+
+1. EDAD ENTRE PARÉNTESIS: La edad va inmediatamente después del nombre. Ejemplo: "LUIS GARCIA PEREZ (20), natural de LIMA". Elimina "de __ años de edad" o "tiene __ años".
+2. TERCERA PERSONA: Usa "el instructor procedió", "se constató", "se intervino". Elimina primera persona.
+3. REGLA PARA-PARA: Elimina menciones de lo NO encontrado ("para drogas negativo", "sin armas"). Solo documenta lo que SÍ se encontró.
+4. CANTIDADES EN LETRAS: Escribe cantidades como "QUINCE (15) envoltorio". No aplica a fechas, horas o DNI.
+5. FECHAS Y HORAS: Formato "07JUL2026" y horas militares "22:06 horas".
+6. OBJETIVIDAD: Elimina adjetivos subjetivos ("sospechoso", "nervioso"). Usa hechos observables.
+7. TÉRMINOS TÉCNICOS: "microbús" (no combi), "trimóvil" (no mototaxi), "motocicleta" (no moto).
+${customPrompt != null && customPrompt.trim().isNotEmpty ? '8. INSTRUCCIÓN ESPECIAL DEL SUPERVISOR: "$customPrompt"\n' : ''}
+═══ REGLA CRÍTICA DEL SISTEMA ═══
+El campo "original" de CADA diff DEBE SER UNA COPIA EXACTA CARACTER POR CARACTER del texto recibido.
+Si cambias aunque sea un espacio o acento, el sistema NO podrá aplicar la corrección.
+Para copiar correctamente: encuentra la frase en el texto, seléccionala mentalmente y replicala sin ningún cambio.
+
+═══ FORMATO DE RESPUESTA ═══
+Responde ÚNICAMENTE con este JSON válido (sin texto extra):
 {
   "diffs": [
     {
-      "original": "párrafo exacto del texto base que debe cambiar",
-      "mejorado": "versión corregida y reorganizada",
-      "razon": "explicación concisa del cambio aplicado"
+      "original": "[COPIA EXACTA del fragmento a corregir]",
+      "mejorado": "[versión corregida]",
+      "razon": "[explicación breve]"
     }
   ],
-  "texto_completo": "el texto base completo ya con TODAS las correcciones aplicadas",
-  "nota": "resumen ejecutivo de los cambios realizados"
+  "texto_completo": "[texto del acta completo con todas las correcciones aplicadas]",
+  "nota": "[resumen ejecutivo de los cambios]"
 }
-
-IMPORTANTE:
-- El "original" debe ser una cita exacta del texto base recibido.
-- Máximo 15 diffs por auditoría. Reorganiza y agrupa párrafos si es necesario para que el acta se vea profesional.
+Máximo 15 diffs. Si no hay nada que corregir, retorna diffs vacío [].
 ''';
 
     try {
@@ -950,7 +1034,8 @@ IMPORTANTE:
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
         body: jsonEncode({
           'model': _kModel,
@@ -980,11 +1065,13 @@ IMPORTANTE:
         final parsed = jsonDecode(content) as Map<String, dynamic>;
 
         final diffList = (parsed['diffs'] as List<dynamic>? ?? [])
-            .map((e) => DocTextDiff(
-                  original: e['original']?.toString() ?? '',
-                  mejorado: e['mejorado']?.toString() ?? '',
-                  razon: e['razon']?.toString() ?? '',
-                ))
+            .map(
+              (e) => DocTextDiff(
+                original: e['original']?.toString() ?? '',
+                mejorado: e['mejorado']?.toString() ?? '',
+                razon: e['razon']?.toString() ?? '',
+              ),
+            )
             .where((d) => d.original.isNotEmpty && d.mejorado.isNotEmpty)
             .toList();
 
@@ -995,7 +1082,11 @@ IMPORTANTE:
         );
       } else if (response.statusCode == 401 && !isRetry) {
         await clearToken();
-        return auditarTextoCompletoConDiff(rawTemplate, tagValues, isRetry: true);
+        return auditarTextoCompletoConDiff(
+          rawTemplate,
+          tagValues,
+          isRetry: true,
+        );
       } else {
         final errorMsg = 'HTTP ${response.statusCode}: ${response.body}';
         debugPrint('[AiTactical] auditarTextoCompletoConDiff error: $errorMsg');
@@ -1081,9 +1172,9 @@ class TextRevision {
 
   TextRevision({
     this.tag = '',
-    required this.original, 
-    required this.mejorado, 
-    required this.razon
+    required this.original,
+    required this.mejorado,
+    required this.razon,
   });
 }
 
@@ -1091,8 +1182,10 @@ class TextRevision {
 class DocTextDiff {
   /// The original paragraph/block text
   final String original;
+
   /// The AI-improved version
   String mejorado;
+
   /// Explanation of what was changed
   final String razon;
 
@@ -1106,8 +1199,10 @@ class DocTextDiff {
 class FullTextAuditResult {
   /// All diffs (only changed paragraphs)
   final List<DocTextDiff> diffs;
+
   /// Full improved text (for "accept all")
   final String textoCompleto;
+
   /// AI summary note
   final String nota;
 

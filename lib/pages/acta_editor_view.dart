@@ -29,9 +29,11 @@ class _ActaEditorViewState extends State<ActaEditorView> {
   @override
   void initState() {
     super.initState();
-    widget.document.content = QuillContentHelper.normalizeToPlainText(widget.document.content);
+    widget.document.content = QuillContentHelper.normalizeToPlainText(
+      widget.document.content,
+    );
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -42,7 +44,10 @@ class _ActaEditorViewState extends State<ActaEditorView> {
       _controller.text; // checking if initialized
     } catch (_) {
       final provider = context.read<InterventionProvider>();
-      final processed = InteractiveDocumentViewer.processConditions(widget.document.content, provider);
+      final processed = InteractiveDocumentViewer.processConditions(
+        widget.document.content,
+        provider,
+      );
       _controller = ActaEditorController(
         initialText: processed,
         provider: provider,
@@ -52,7 +57,11 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     }
   }
 
-  void _onTagTappedCallback(String tagString, TagDefinition? tagDef, String? currentValue) {
+  void _onTagTappedCallback(
+    String tagString,
+    TagDefinition? tagDef,
+    String? currentValue,
+  ) {
     // Re-use InteractiveDocumentViewer's logic but we need an instance
     final tempViewer = InteractiveDocumentViewer(content: '');
     tempViewer.onTagTappedPublic(context, tagString, tagDef, currentValue, () {
@@ -64,7 +73,9 @@ class _ActaEditorViewState extends State<ActaEditorView> {
   void didUpdateWidget(ActaEditorView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.document.id != widget.document.id) {
-      widget.document.content = QuillContentHelper.normalizeToPlainText(widget.document.content);
+      widget.document.content = QuillContentHelper.normalizeToPlainText(
+        widget.document.content,
+      );
       _controller.text = widget.document.content;
       _accepted = [];
       _localDocId = null;
@@ -105,7 +116,7 @@ class _ActaEditorViewState extends State<ActaEditorView> {
   Future<void> _onMejorarConIa(InterventionProvider provider) async {
     final existing = _getRevisiones(provider);
     if (_isImprovingWithAi || existing.isNotEmpty) return;
-    
+
     // Recopilar las etiquetas de TODAS las actas de la sesión (no solo la actual)
     final tagRegex = RegExp(r'\[(.*?)\]');
     final Map<String, String> tagValues = {};
@@ -130,12 +141,17 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     if (mounted && docCount > 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(children: [
-            const SizedBox(width: 4),
-            const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            const SizedBox(width: 12),
-            Text('Auditando $docCount actas de la intervención...'),
-          ]),
+          content: Row(
+            children: [
+              const SizedBox(width: 4),
+              const CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 12),
+              Text('Auditando $docCount actas de la intervención...'),
+            ],
+          ),
           backgroundColor: const Color(0xFF7B2FFF),
           duration: const Duration(seconds: 30),
         ),
@@ -144,7 +160,10 @@ class _ActaEditorViewState extends State<ActaEditorView> {
 
     AiAuditResult? auditResult;
     try {
-      auditResult = await AiTacticalService.mejorarTextoCompleto(widget.document.content, tagValues);
+      auditResult = await AiTacticalService.mejorarTextoCompleto(
+        widget.document.content,
+        tagValues,
+      );
     } finally {
       if (mounted) {
         setState(() => _isImprovingWithAi = false);
@@ -157,7 +176,9 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     if (auditResult == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('⚠ Sin conexión con Groq — verifica tu API Key en Ajustes'),
+          content: Text(
+            '⚠ Sin conexión con Groq — verifica tu API Key en Ajustes',
+          ),
           backgroundColor: Color(0xFFB71C1C),
         ),
       );
@@ -169,7 +190,9 @@ class _ActaEditorViewState extends State<ActaEditorView> {
       provider.setInvalidFields(auditResult.camposInvalidos);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('⚠ La IA detectó ${auditResult.camposInvalidos.length} datos insuficientes o inválidos. Por favor, corrígelos.'),
+          content: Text(
+            '⚠ La IA detectó ${auditResult.camposInvalidos.length} datos insuficientes o inválidos. Por favor, corrígelos.',
+          ),
           backgroundColor: Colors.orange.shade800,
           duration: const Duration(seconds: 5),
         ),
@@ -182,11 +205,17 @@ class _ActaEditorViewState extends State<ActaEditorView> {
       if (auditResult.camposInvalidos.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(children: const [
-              Icon(Icons.verified, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Expanded(child: Text('✅ Todas las actas cumplen con la doctrina DOCPOL — sin correcciones necesarias')),
-            ]),
+            content: Row(
+              children: const [
+                Icon(Icons.verified, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '✅ Todas las actas cumplen con la doctrina DOCPOL — sin correcciones necesarias',
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: Colors.green.shade800,
             duration: const Duration(seconds: 4),
           ),
@@ -203,34 +232,35 @@ class _ActaEditorViewState extends State<ActaEditorView> {
     });
   }
 
-
   /// Apply accepted revisions to tags.
   void _applyTagRevisiones(InterventionProvider provider) {
     final revisiones = _getRevisiones(provider);
     final acceptedRevs = <TextRevision>[];
-    
+
     for (int i = 0; i < revisiones.length; i++) {
       if (_accepted[i]) {
         acceptedRevs.add(revisiones[i]);
       }
     }
-    
+
     if (acceptedRevs.isNotEmpty) {
       provider.applyAuditRevisions(acceptedRevs);
     }
-    
+
     final applied = acceptedRevs.length;
     final rejected = _accepted.where((v) => !v).length;
-    
+
     provider.clearPendingRevisiones();
     setState(() {
       _accepted = [];
       _localDocId = null;
     });
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✅ $applied etiqueta(s) actualizadas · $rejected rechazadas'),
+        content: Text(
+          '✅ $applied etiqueta(s) actualizadas · $rejected rechazadas',
+        ),
         backgroundColor: Colors.green.shade800,
         duration: const Duration(seconds: 3),
       ),
@@ -270,7 +300,11 @@ class _ActaEditorViewState extends State<ActaEditorView> {
               if (hasRevisiones)
                 Row(
                   children: [
-                    const Icon(Icons.auto_fix_high, color: Color(0xFF7B2FFF), size: 16),
+                    const Icon(
+                      Icons.auto_fix_high,
+                      color: Color(0xFF7B2FFF),
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '${revisiones.length} sugerencias DOCPOL',
@@ -284,63 +318,79 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                 ),
               const Spacer(),
               // ✨ Action buttons
-              if (hasRevisiones) ...
-                [
-                  GestureDetector(
-                    onTap: () => _discardTagRevisiones(provider),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF5350).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFEF5350).withValues(alpha: 0.3)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.close, color: Color(0xFFEF5350), size: 14),
-                          SizedBox(width: 4),
-                          Text('Descartar', style: TextStyle(color: Color(0xFFEF5350), fontSize: 12, fontWeight: FontWeight.w600)),
-                        ],
+              if (hasRevisiones) ...[
+                GestureDetector(
+                  onTap: () => _discardTagRevisiones(provider),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF5350).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFFEF5350).withValues(alpha: 0.3),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _applyTagRevisiones(provider),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E90FF), Color(0xFF0066CC)],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1E90FF).withValues(alpha: 0.4),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.close, color: Color(0xFFEF5350), size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          'Descartar',
+                          style: TextStyle(
+                            color: Color(0xFFEF5350),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
-                        ],
-                      ),
-                      child: Text(
-                        'Aplicar ${_accepted.where((v) => v).length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _applyTagRevisiones(provider),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E90FF), Color(0xFF0066CC)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF1E90FF).withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'Aplicar ${_accepted.where((v) => v).length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                ]
-              else
+                ),
+              ] else
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   child: _isImprovingWithAi
                       ? Container(
                           key: const ValueKey('loading'),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Color(0xFF7B2FFF), Color(0xFF1E90FF)],
@@ -374,7 +424,10 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                           key: const ValueKey('button'),
                           onTap: () => _onMejorarConIa(provider),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Color(0xFF7B2FFF), Color(0xFF1E90FF)],
@@ -382,7 +435,9 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF7B2FFF).withValues(alpha: 0.4),
+                                  color: const Color(
+                                    0xFF7B2FFF,
+                                  ).withValues(alpha: 0.4),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -391,7 +446,11 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.auto_fix_high, color: Colors.white, size: 16),
+                                Icon(
+                                  Icons.auto_fix_high,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
                                 SizedBox(width: 6),
                                 Text(
                                   'Mejorar con IA',
@@ -419,8 +478,12 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                     revisiones: revisiones,
                     accepted: _accepted,
                     onToggle: (i, val) => setState(() => _accepted[i] = val),
-                    onAcceptAll: () => setState(() => _accepted = List.filled(revisiones.length, true)),
-                    onRejectAll: () => setState(() => _accepted = List.filled(revisiones.length, false)),
+                    onAcceptAll: () => setState(
+                      () => _accepted = List.filled(revisiones.length, true),
+                    ),
+                    onRejectAll: () => setState(
+                      () => _accepted = List.filled(revisiones.length, false),
+                    ),
                     onApply: () => _applyTagRevisiones(provider),
                     onDiscard: () => _discardTagRevisiones(provider),
                   )
@@ -436,17 +499,20 @@ class _ActaEditorViewState extends State<ActaEditorView> {
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 28,
+                    ),
                     child: TextField(
                       controller: _controller,
                       maxLines: null,
                       expands: true,
-                      strutStyle: const StrutStyle(
-                        fontSize: 15,
-                        height: 1.6,
-                      ),
+                      strutStyle: const StrutStyle(fontSize: 15, height: 1.6),
                       style: const TextStyle(
-                          color: Colors.black87, fontSize: 15, height: null),
+                        color: Colors.black87,
+                        fontSize: 15,
+                        height: null,
+                      ),
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         filled: false,
@@ -498,7 +564,9 @@ class _RevisionCardsViewer extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A3A),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF7B2FFF).withValues(alpha: 0.4)),
+            border: Border.all(
+              color: const Color(0xFF7B2FFF).withValues(alpha: 0.4),
+            ),
           ),
           child: Row(
             children: [
@@ -513,23 +581,37 @@ class _RevisionCardsViewer extends StatelessWidget {
               TextButton(
                 onPressed: onRejectAll,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                 ),
                 child: const Text(
                   '✗ Ninguna',
-                  style: TextStyle(color: Color(0xFFEF5350), fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Color(0xFFEF5350),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               TextButton(
                 onPressed: onAcceptAll,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                 ),
                 child: const Text(
                   '✓ Todas',
-                  style: TextStyle(color: Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Color(0xFF4CAF50),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -561,12 +643,22 @@ class _RevisionCardsViewer extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFFEF5350)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  icon: const Icon(Icons.close, color: Color(0xFFEF5350), size: 16),
+                  icon: const Icon(
+                    Icons.close,
+                    color: Color(0xFFEF5350),
+                    size: 16,
+                  ),
                   label: const Text(
                     'Rechazar todas',
-                    style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(
+                      color: Color(0xFFEF5350),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                   onPressed: onDiscard,
                 ),
@@ -578,7 +670,9 @@ class _RevisionCardsViewer extends StatelessWidget {
                     backgroundColor: const Color(0xFF1E90FF),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text(
@@ -611,36 +705,50 @@ class _ViewerRevisionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final acceptedCardColor = isDark 
-        ? const Color(0xFF1E90FF).withValues(alpha: 0.15) 
+    final acceptedCardColor = isDark
+        ? const Color(0xFF1E90FF).withValues(alpha: 0.15)
         : const Color(0xFF1E90FF).withValues(alpha: 0.05);
     final unacceptedCardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final borderColor = isAccepted ? const Color(0xFF1E90FF) : (isDark ? Colors.grey.shade800 : Colors.grey.shade300);
+    final borderColor = isAccepted
+        ? const Color(0xFF1E90FF)
+        : (isDark ? Colors.grey.shade800 : Colors.grey.shade300);
 
-    final tagBgColor = isDark ? const Color(0xFF9C27B0).withValues(alpha: 0.2) : const Color(0xFF9C27B0).withValues(alpha: 0.1);
-    final tagTextColor = isDark ? Colors.purple.shade200 : const Color(0xFF6A1B9A);
+    final tagBgColor = isDark
+        ? const Color(0xFF9C27B0).withValues(alpha: 0.2)
+        : const Color(0xFF9C27B0).withValues(alpha: 0.1);
+    final tagTextColor = isDark
+        ? Colors.purple.shade200
+        : const Color(0xFF6A1B9A);
 
     final labelColor = isDark ? Colors.grey.shade400 : Colors.black54;
-    final originalTextColor = isDark ? Colors.red.shade300 : const Color(0xFFB71C1C);
-    final originalDecorationColor = isDark ? Colors.red.shade400 : const Color(0xFFEF5350);
-    final suggestionTextColor = isDark ? Colors.blue.shade200 : const Color(0xFF0D47A1);
+    final originalTextColor = isDark
+        ? Colors.red.shade300
+        : const Color(0xFFB71C1C);
+    final originalDecorationColor = isDark
+        ? Colors.red.shade400
+        : const Color(0xFFEF5350);
+    final suggestionTextColor = isDark
+        ? Colors.blue.shade200
+        : const Color(0xFF0D47A1);
 
-    final inputBgColor = isDark ? Colors.black26 : Colors.blue.withValues(alpha: 0.05);
-    final inputBorderColor = isDark ? Colors.blue.withValues(alpha: 0.3) : Colors.blue.withValues(alpha: 0.2);
+    final inputBgColor = isDark
+        ? Colors.black26
+        : Colors.blue.withValues(alpha: 0.05);
+    final inputBorderColor = isDark
+        ? Colors.blue.withValues(alpha: 0.3)
+        : Colors.blue.withValues(alpha: 0.2);
 
     final infoBgColor = isDark ? Colors.grey.shade900 : Colors.grey.shade50;
-    final infoBorderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
-    final infoTextColor = isDark ? Colors.grey.shade300 : Colors.black87;
+    final infoBorderColor = isDark
+        ? Colors.grey.shade800
+        : Colors.grey.shade200;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: borderColor,
-          width: isAccepted ? 2 : 1,
-        ),
+        side: BorderSide(color: borderColor, width: isAccepted ? 2 : 1),
       ),
       color: isAccepted ? acceptedCardColor : unacceptedCardColor,
       child: InkWell(
@@ -655,7 +763,10 @@ class _ViewerRevisionCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: tagBgColor,
                       borderRadius: BorderRadius.circular(6),
@@ -672,12 +783,23 @@ class _ViewerRevisionCard extends StatelessWidget {
                   ),
                   Icon(
                     isAccepted ? Icons.check_circle : Icons.circle_outlined,
-                    color: isAccepted ? const Color(0xFF1E90FF) : (isDark ? Colors.grey.shade600 : Colors.grey.shade400),
+                    color: isAccepted
+                        ? const Color(0xFF1E90FF)
+                        : (isDark
+                              ? Colors.grey.shade600
+                              : Colors.grey.shade400),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Text('Original:', style: TextStyle(fontSize: 12, color: labelColor, fontWeight: FontWeight.bold)),
+              Text(
+                'Original:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: labelColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 revision.original,
@@ -690,7 +812,14 @@ class _ViewerRevisionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              Text('Sugerencia:', style: TextStyle(fontSize: 12, color: labelColor, fontWeight: FontWeight.bold)),
+              Text(
+                'Sugerencia:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: labelColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 4),
               TextFormField(
                 initialValue: revision.mejorado,
@@ -706,7 +835,10 @@ class _ViewerRevisionCard extends StatelessWidget {
                 ),
                 decoration: InputDecoration(
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   filled: true,
                   fillColor: inputBgColor,
                   enabledBorder: OutlineInputBorder(
@@ -718,7 +850,11 @@ class _ViewerRevisionCard extends StatelessWidget {
                     borderSide: const BorderSide(color: Color(0xFF1E90FF)),
                   ),
                   hintText: 'Escribe la corrección aquí',
-                  hintStyle: TextStyle(color: isDark ? Colors.blue.withValues(alpha: 0.4) : Colors.blue.withValues(alpha: 0.5)),
+                  hintStyle: TextStyle(
+                    color: isDark
+                        ? Colors.blue.withValues(alpha: 0.4)
+                        : Colors.blue.withValues(alpha: 0.5),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -732,7 +868,11 @@ class _ViewerRevisionCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.info_outline, size: 14, color: Colors.black54),
+                    const Icon(
+                      Icons.info_outline,
+                      size: 14,
+                      color: Colors.black54,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -765,10 +905,7 @@ class _TrackChangesSheet extends StatefulWidget {
   final List<TextRevision> revisiones;
   final void Function(List<TextRevision> aplicadas) onApply;
 
-  const _TrackChangesSheet({
-    required this.revisiones,
-    required this.onApply,
-  });
+  const _TrackChangesSheet({required this.revisiones, required this.onApply});
 
   @override
   State<_TrackChangesSheet> createState() => _TrackChangesSheetState();
@@ -784,8 +921,10 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
     _accepted = List.filled(widget.revisiones.length, true);
   }
 
-  void _acceptAll() => setState(() => _accepted = List.filled(widget.revisiones.length, true));
-  void _rejectAll() => setState(() => _accepted = List.filled(widget.revisiones.length, false));
+  void _acceptAll() =>
+      setState(() => _accepted = List.filled(widget.revisiones.length, true));
+  void _rejectAll() =>
+      setState(() => _accepted = List.filled(widget.revisiones.length, false));
 
   void _apply() {
     final aplicadas = <TextRevision>[];
@@ -798,8 +937,9 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            '✅ ${aplicadas.length} corrección(es) aplicadas | '
-            '${widget.revisiones.length - aplicadas.length} rechazadas'),
+          '✅ ${aplicadas.length} corrección(es) aplicadas | '
+          '${widget.revisiones.length - aplicadas.length} rechazadas',
+        ),
         backgroundColor: Colors.green.shade800,
         duration: const Duration(seconds: 3),
       ),
@@ -844,7 +984,11 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
                         ),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.auto_fix_high, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.auto_fix_high,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -861,7 +1005,10 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
                           ),
                           Text(
                             '${widget.revisiones.length} cambios detectados · $acceptedCount seleccionados',
-                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -869,11 +1016,23 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
                     // Accept/Reject All row
                     TextButton(
                       onPressed: _acceptAll,
-                      child: const Text('✓ Todos', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 12)),
+                      child: const Text(
+                        '✓ Todos',
+                        style: TextStyle(
+                          color: Color(0xFF4CAF50),
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                     TextButton(
                       onPressed: _rejectAll,
-                      child: const Text('✗ Ninguno', style: TextStyle(color: Color(0xFFEF5350), fontSize: 12)),
+                      child: const Text(
+                        '✗ Ninguno',
+                        style: TextStyle(
+                          color: Color(0xFFEF5350),
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -916,10 +1075,17 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          icon: const Icon(Icons.close, color: Color(0xFFEF5350), size: 18),
+                          icon: const Icon(
+                            Icons.close,
+                            color: Color(0xFFEF5350),
+                            size: 18,
+                          ),
                           label: const Text(
                             'Rechazar todos',
-                            style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Color(0xFFEF5350),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           onPressed: () => Navigator.pop(context),
                         ),
@@ -935,7 +1101,11 @@ class _TrackChangesSheetState extends State<_TrackChangesSheet> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                          icon: const Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                           label: Text(
                             'Aplicar $acceptedCount corrección(es)',
                             style: const TextStyle(
@@ -1016,7 +1186,11 @@ class _RevisionCardState extends State<_RevisionCard> {
                   child: Center(
                     child: Text(
                       '${widget.index}',
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -1057,7 +1231,9 @@ class _RevisionCardState extends State<_RevisionCard> {
                     ),
                     child: Icon(
                       Icons.close,
-                      color: !isAccepted ? const Color(0xFFEF5350) : Colors.white24,
+                      color: !isAccepted
+                          ? const Color(0xFFEF5350)
+                          : Colors.white24,
                       size: 18,
                     ),
                   ),
@@ -1076,7 +1252,9 @@ class _RevisionCardState extends State<_RevisionCard> {
                     ),
                     child: Icon(
                       Icons.check,
-                      color: isAccepted ? const Color(0xFF4CAF50) : Colors.white24,
+                      color: isAccepted
+                          ? const Color(0xFF4CAF50)
+                          : Colors.white24,
                       size: 18,
                     ),
                   ),
@@ -1093,7 +1271,9 @@ class _RevisionCardState extends State<_RevisionCard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF7B2FFF).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF7B2FFF).withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: const Color(0xFF7B2FFF).withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1187,23 +1367,41 @@ class InteractiveDocumentViewer extends StatelessWidget {
 
   // All condition keys used across Actium actas. Add new keys here as the system grows.
   static const _conditionKeys = [
-    'ACOMPANANTE', 'FISCAL', 'VEHICULO', 'DETENIDO', 'COMISARIA',
-    'MENOR', 'EXTRANJERO', 'HERIDO',
+    'ACOMPANANTE',
+    'FISCAL',
+    'VEHICULO',
+    'DETENIDO',
+    'COMISARIA',
+    'MENOR',
+    'EXTRANJERO',
+    'HERIDO',
+    'SE_NEGO_FIRMAR',
   ];
 
   // Pre-compiled RegExp patterns for performance optimization
   static final Map<String, RegExp> _ifRegexes = {
     for (final key in _conditionKeys)
-      key: RegExp('<\\s*IF_$key\\s*>(.*?)<\\s*/\\s*IF_$key\\s*>', dotAll: true, caseSensitive: false),
+      key: RegExp(
+        '<\\s*IF_$key\\s*>(.*?)<\\s*/\\s*IF_$key\\s*>',
+        dotAll: true,
+        caseSensitive: false,
+      ),
   };
 
   static final Map<String, RegExp> _ifNotRegexes = {
     for (final key in _conditionKeys)
-      key: RegExp('<\\s*IF_NOT_$key\\s*>(.*?)<\\s*/\\s*IF_NOT_$key\\s*>', dotAll: true, caseSensitive: false),
+      key: RegExp(
+        '<\\s*IF_NOT_$key\\s*>(.*?)<\\s*/\\s*IF_NOT_$key\\s*>',
+        dotAll: true,
+        caseSensitive: false,
+      ),
   };
 
   static final RegExp _tagRegex = RegExp(r'\[(.*?)\]');
-  static final RegExp _safetyRegex = RegExp(r'<\s*/?\s*IF_[A-Z0-9_]+\s*>', caseSensitive: false);
+  static final RegExp _safetyRegex = RegExp(
+    r'<\s*/?\s*IF_[A-Z0-9_]+\s*>',
+    caseSensitive: false,
+  );
 
   static String processConditions(String text, InterventionProvider provider) {
     String result = text;
@@ -1212,13 +1410,22 @@ class InteractiveDocumentViewer extends StatelessWidget {
       final condTrue = provider.getCondition(key);
 
       final ifRegex = _ifRegexes[key]!;
-      result = result.replaceAllMapped(ifRegex, (m) => condTrue ? m.group(1)! : '');
+      result = result.replaceAllMapped(
+        ifRegex,
+        (m) => condTrue ? m.group(1)! : '',
+      );
 
       final ifNotRegex = _ifNotRegexes[key]!;
-      result = result.replaceAllMapped(ifNotRegex, (m) => !condTrue ? m.group(1)! : '');
+      result = result.replaceAllMapped(
+        ifNotRegex,
+        (m) => !condTrue ? m.group(1)! : '',
+      );
     }
 
     result = result.replaceAll(_safetyRegex, '');
+    
+    // Eliminar etiquetas HTML básicas (como <u>, <b>, <i>) para que no se vean como texto plano
+    result = result.replaceAll(RegExp(r'</?[a-zA-Z][^>]*>'), '');
 
     return result;
   }
@@ -1227,11 +1434,11 @@ class InteractiveDocumentViewer extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<InterventionProvider>();
     final processedContent = processConditions(content, provider);
-    print("DEBUG ACTA CONTENT INPUT: $content");
-    print("DEBUG ACTA CONTENT OUTPUT: $processedContent");
-    
+    debugPrint("DEBUG ACTA CONTENT INPUT: $content");
+    debugPrint("DEBUG ACTA CONTENT OUTPUT: $processedContent");
+
     final matches = _tagRegex.allMatches(processedContent);
-    
+
     if (matches.isEmpty) {
       return SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -1251,7 +1458,11 @@ class InteractiveDocumentViewer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
           child: Text(
             processedContent,
-            style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.6),
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 15,
+              height: 1.6,
+            ),
           ),
         ),
       );
@@ -1262,37 +1473,47 @@ class InteractiveDocumentViewer extends StatelessWidget {
 
     for (final match in matches) {
       if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(text: processedContent.substring(lastMatchEnd, match.start)));
+        spans.add(
+          TextSpan(text: processedContent.substring(lastMatchEnd, match.start)),
+        );
       }
-      
+
       final tagString = match.group(0)!;
-      
+
       final tagDef = TagsRepository.tagMap[tagString];
 
       final currentValue = provider.getTagValue(tagString);
 
-      spans.add(WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
-        child: InkWell(
-          onTap: () => _onTagTapped(context, tagString, tagDef, currentValue),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: currentValue != null ? Colors.green.shade100 : Colors.orange.shade100,
-              border: Border.all(color: currentValue != null ? Colors.green : Colors.orange),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              currentValue ?? (tagDef?.name ?? tagString),
-              style: TextStyle(
-                color: currentValue != null ? Colors.green.shade900 : Colors.orange.shade900,
-                fontWeight: FontWeight.bold,
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: InkWell(
+            onTap: () => _onTagTapped(context, tagString, tagDef, currentValue),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: currentValue != null
+                    ? Colors.green.shade100
+                    : Colors.orange.shade100,
+                border: Border.all(
+                  color: currentValue != null ? Colors.green : Colors.orange,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                currentValue ?? (tagDef?.name ?? tagString),
+                style: TextStyle(
+                  color: currentValue != null
+                      ? Colors.green.shade900
+                      : Colors.orange.shade900,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
         ),
-      ));
+      );
 
       lastMatchEnd = match.end;
     }
@@ -1319,7 +1540,11 @@ class InteractiveDocumentViewer extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
         child: RichText(
           text: TextSpan(
-            style: const TextStyle(color: Colors.black87, fontSize: 15, height: 1.6),
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 15,
+              height: 1.6,
+            ),
             children: spans,
           ),
         ),
@@ -1327,10 +1552,17 @@ class InteractiveDocumentViewer extends StatelessWidget {
     );
   }
 
-  void onTagTappedPublic(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue, VoidCallback onHide) {
-    final isPerson = tagString.startsWith('[imputado.') ||
-                     tagString.startsWith('[testigo.') ||
-                     tagString.startsWith('[agraviado.');
+  void onTagTappedPublic(
+    BuildContext context,
+    String tagString,
+    TagDefinition? tagDef,
+    String? currentValue,
+    VoidCallback onHide,
+  ) {
+    final isPerson =
+        tagString.startsWith('[imputado.') ||
+        tagString.startsWith('[testigo.') ||
+        tagString.startsWith('[agraviado.');
 
     if (!isPerson) {
       _showInputModal(context, tagString, tagDef, currentValue, onHide);
@@ -1340,8 +1572,8 @@ class InteractiveDocumentViewer extends StatelessWidget {
     final dniTag = tagString.startsWith('[imputado.')
         ? '[imputado.dni]'
         : tagString.startsWith('[testigo.')
-            ? '[testigo.dni]'
-            : '[agraviado.dni]';
+        ? '[testigo.dni]'
+        : '[agraviado.dni]';
 
     showModalBottomSheet(
       context: context,
@@ -1362,7 +1594,9 @@ class InteractiveDocumentViewer extends StatelessWidget {
               _showInputModal(context, tagString, tagDef, currentValue, onHide);
             } else {
               final dniDef = TagsRepository.tagMap[dniTag];
-              final currentDniVal = context.read<InterventionProvider>().getTagValue(dniTag);
+              final currentDniVal = context
+                  .read<InterventionProvider>()
+                  .getTagValue(dniTag);
               _showInputModal(context, dniTag, dniDef, currentDniVal, onHide);
             }
           },
@@ -1371,10 +1605,16 @@ class InteractiveDocumentViewer extends StatelessWidget {
     );
   }
 
-  void _onTagTapped(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue) {
-    final isPerson = tagString.startsWith('[imputado.') ||
-                     tagString.startsWith('[testigo.') ||
-                     tagString.startsWith('[agraviado.');
+  void _onTagTapped(
+    BuildContext context,
+    String tagString,
+    TagDefinition? tagDef,
+    String? currentValue,
+  ) {
+    final isPerson =
+        tagString.startsWith('[imputado.') ||
+        tagString.startsWith('[testigo.') ||
+        tagString.startsWith('[agraviado.');
 
     if (!isPerson) {
       _showInputModal(context, tagString, tagDef, currentValue);
@@ -1384,8 +1624,8 @@ class InteractiveDocumentViewer extends StatelessWidget {
     final dniTag = tagString.startsWith('[imputado.')
         ? '[imputado.dni]'
         : tagString.startsWith('[testigo.')
-            ? '[testigo.dni]'
-            : '[agraviado.dni]';
+        ? '[testigo.dni]'
+        : '[agraviado.dni]';
 
     showModalBottomSheet(
       context: context,
@@ -1405,7 +1645,9 @@ class InteractiveDocumentViewer extends StatelessWidget {
               _showInputModal(context, tagString, tagDef, currentValue);
             } else {
               final dniDef = TagsRepository.tagMap[dniTag];
-              final currentDniVal = context.read<InterventionProvider>().getTagValue(dniTag);
+              final currentDniVal = context
+                  .read<InterventionProvider>()
+                  .getTagValue(dniTag);
               _showInputModal(context, dniTag, dniDef, currentDniVal);
             }
           },
@@ -1414,7 +1656,13 @@ class InteractiveDocumentViewer extends StatelessWidget {
     );
   }
 
-  void _showInputModal(BuildContext context, String tagString, TagDefinition? tagDef, String? currentValue, [VoidCallback? onHide]) {
+  void _showInputModal(
+    BuildContext context,
+    String tagString,
+    TagDefinition? tagDef,
+    String? currentValue, [
+    VoidCallback? onHide,
+  ]) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1423,7 +1671,12 @@ class InteractiveDocumentViewer extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return TagInputWidget(tagString: tagString, tagDef: tagDef, initialValue: currentValue, onHide: onHide);
+        return TagInputWidget(
+          tagString: tagString,
+          tagDef: tagDef,
+          initialValue: currentValue,
+          onHide: onHide,
+        );
       },
     );
   }
@@ -1435,7 +1688,13 @@ class TagInputWidget extends StatefulWidget {
   final String? initialValue;
   final VoidCallback? onHide;
 
-  const TagInputWidget({super.key, required this.tagString, this.tagDef, this.initialValue, this.onHide});
+  const TagInputWidget({
+    super.key,
+    required this.tagString,
+    this.tagDef,
+    this.initialValue,
+    this.onHide,
+  });
 
   @override
   State<TagInputWidget> createState() => _TagInputWidgetState();
@@ -1482,7 +1741,7 @@ class _TagInputWidgetState extends State<TagInputWidget> {
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: widget.initialValue);
-    
+
     // Initialize NENEOIDD controllers
     _neneNombreCtrl = TextEditingController();
     _neneEdadCtrl = TextEditingController();
@@ -1501,7 +1760,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
       _loadProfileCity();
     }
 
-    if (widget.tagDef?.options != null && widget.tagDef!.options!.contains(widget.initialValue)) {
+    if (widget.tagDef?.options != null &&
+        widget.tagDef!.options!.contains(widget.initialValue)) {
       _selectedOption = widget.initialValue;
     }
     if (_isDniTag() || _isPlacaTag()) {
@@ -1526,13 +1786,13 @@ class _TagInputWidgetState extends State<TagInputWidget> {
 
   bool _isDniTag() {
     return widget.tagString == '[imputado.dni]' ||
-           widget.tagString == '[testigo.dni]' ||
-           widget.tagString == '[agraviado.dni]';
+        widget.tagString == '[testigo.dni]' ||
+        widget.tagString == '[agraviado.dni]';
   }
 
   bool _isPlacaTag() {
     return widget.tagString == '[vehiculo.placa_unica_nacional_rodaje]' ||
-           widget.tagString == '[vehiculo.placa]';
+        widget.tagString == '[vehiculo.placa]';
   }
 
   Future<void> _loadApiKey() async {
@@ -1568,7 +1828,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     final key = _apiKey ?? '';
     if (key.trim().isEmpty) {
       setState(() {
-        _dniError = 'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
+        _dniError =
+            'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
         _dniResultado = null;
       });
       return;
@@ -1601,7 +1862,10 @@ class _TagInputWidgetState extends State<TagInputWidget> {
           _isLoadingDni = false;
           if (response.estado && response.resultado != null) {
             final ceData = response.resultado!;
-            final nombreCompleto = "${ceData.nombres} ${ceData.apellidoPaterno} ${ceData.apellidoMaterno}".trim().replaceAll(RegExp(r'\s+'), ' ');
+            final nombreCompleto =
+                "${ceData.nombres} ${ceData.apellidoPaterno} ${ceData.apellidoMaterno}"
+                    .trim()
+                    .replaceAll(RegExp(r'\s+'), ' ');
             _dniResultado = DniResultado(
               id: ceData.numero,
               nombres: ceData.nombres,
@@ -1641,7 +1905,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     final key = _apiKey ?? '';
     if (key.trim().isEmpty) {
       setState(() {
-        _placaError = 'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
+        _placaError =
+            'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
         _placaResultado = null;
       });
       return;
@@ -1679,7 +1944,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
       final birthDate = DateTime(year, month, day);
       final today = DateTime.now();
       int age = today.year - birthDate.year;
-      if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+      if (today.month < birthDate.month ||
+          (today.month == birthDate.month && today.day < birthDate.day)) {
         age--;
       }
       return age;
@@ -1704,10 +1970,13 @@ class _TagInputWidgetState extends State<TagInputWidget> {
 
   String _toTitleCase(String str) {
     if (str.isEmpty) return str;
-    return str.split(' ').map((word) {
-      if (word.isEmpty) return word;
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return str
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   void _parseExistingNeneoidd(String text) {
@@ -1726,16 +1995,25 @@ class _TagInputWidgetState extends State<TagInputWidget> {
         _neneNaturalCtrl.text = naturalMatch.group(1)!.trim();
       }
 
-      final dniRegex = RegExp(r'identificado con DNI\s*:\s*(\w+)', caseSensitive: false);
+      final dniRegex = RegExp(
+        r'identificado con DNI\s*:\s*(\w+)',
+        caseSensitive: false,
+      );
       final dniMatch = dniRegex.firstMatch(text);
       if (dniMatch != null) {
         _neneDniCtrl.text = dniMatch.group(1)!.trim();
       }
 
-      final dirRegex = RegExp(r'domiciliado en ([^.]+|.+)$', caseSensitive: false);
+      final dirRegex = RegExp(
+        r'domiciliado en ([^.]+|.+)$',
+        caseSensitive: false,
+      );
       final dirMatch = dirRegex.firstMatch(text);
       if (dirMatch != null) {
-        _neneDireccionCtrl.text = dirMatch.group(1)!.trim().replaceAll(RegExp(r'\s+$'), '');
+        _neneDireccionCtrl.text = dirMatch
+            .group(1)!
+            .trim()
+            .replaceAll(RegExp(r'\s+$'), '');
       }
 
       final parts = text.split(',');
@@ -1744,13 +2022,19 @@ class _TagInputWidgetState extends State<TagInputWidget> {
         String ocup = parts[3].trim();
         String inst = parts[4].trim();
 
-        if (!civil.toLowerCase().contains('natural') && !civil.toLowerCase().contains('identificado') && !civil.toLowerCase().contains('domiciliado')) {
+        if (!civil.toLowerCase().contains('natural') &&
+            !civil.toLowerCase().contains('identificado') &&
+            !civil.toLowerCase().contains('domiciliado')) {
           _neneCivilCtrl.text = civil;
         }
-        if (!ocup.toLowerCase().contains('natural') && !ocup.toLowerCase().contains('identificado') && !ocup.toLowerCase().contains('domiciliado')) {
+        if (!ocup.toLowerCase().contains('natural') &&
+            !ocup.toLowerCase().contains('identificado') &&
+            !ocup.toLowerCase().contains('domiciliado')) {
           _neneOcupacionCtrl.text = ocup;
         }
-        if (!inst.toLowerCase().contains('natural') && !inst.toLowerCase().contains('identificado') && !inst.toLowerCase().contains('domiciliado')) {
+        if (!inst.toLowerCase().contains('natural') &&
+            !inst.toLowerCase().contains('identificado') &&
+            !inst.toLowerCase().contains('domiciliado')) {
           _neneInstruccionCtrl.text = inst;
         }
       }
@@ -1782,7 +2066,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     final key = _apiKey ?? '';
     if (key.trim().isEmpty) {
       setState(() {
-        _neneDniError = 'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
+        _neneDniError =
+            'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS).';
       });
       return;
     }
@@ -1805,8 +2090,8 @@ class _TagInputWidgetState extends State<TagInputWidget> {
           if (res.distrito.isNotEmpty) {
             _neneNaturalCtrl.text = _toTitleCase(res.distrito);
           }
-          _neneDireccionCtrl.text = res.direccionCompleta.isNotEmpty 
-              ? res.direccionCompleta 
+          _neneDireccionCtrl.text = res.direccionCompleta.isNotEmpty
+              ? res.direccionCompleta
               : res.direccion;
           _neneDniError = null;
         } else {
@@ -1845,12 +2130,24 @@ class _TagInputWidgetState extends State<TagInputWidget> {
         children: [
           if (isHora)
             ActionChip(
-              avatar: const Icon(Icons.access_time, size: 14, color: Colors.white),
+              avatar: const Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.white,
+              ),
               backgroundColor: const Color(0xFF1E80F0),
-              label: const Text('Insertar hora del sistema', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Insertar hora del sistema',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () {
                 final now = DateTime.now();
-                final formatted = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+                final formatted =
+                    "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
                 setState(() {
                   _ctrl.text = formatted;
                 });
@@ -1858,9 +2155,20 @@ class _TagInputWidgetState extends State<TagInputWidget> {
             ),
           if (isFecha)
             ActionChip(
-              avatar: const Icon(Icons.calendar_today, size: 14, color: Colors.white),
+              avatar: const Icon(
+                Icons.calendar_today,
+                size: 14,
+                color: Colors.white,
+              ),
               backgroundColor: const Color(0xFF1E80F0),
-              label: const Text('Insertar fecha del sistema', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Insertar fecha del sistema',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () {
                 setState(() {
                   _ctrl.text = _formatSystemDate(DateTime.now());
@@ -1869,9 +2177,20 @@ class _TagInputWidgetState extends State<TagInputWidget> {
             ),
           if (isProvincia && _profileCity.isNotEmpty)
             ActionChip(
-              avatar: const Icon(Icons.location_city, size: 14, color: Colors.white),
+              avatar: const Icon(
+                Icons.location_city,
+                size: 14,
+                color: Colors.white,
+              ),
               backgroundColor: const Color(0xFF1E80F0),
-              label: Text('Usar ciudad del perfil: $_profileCity', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              label: Text(
+                'Usar ciudad del perfil: $_profileCity',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () {
                 setState(() {
                   _ctrl.text = _profileCity;
@@ -1884,7 +2203,20 @@ class _TagInputWidgetState extends State<TagInputWidget> {
   }
 
   String _formatSystemDate(DateTime dt) {
-    const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SET', 'OCT', 'NOV', 'DIC'];
+    const months = [
+      'ENE',
+      'FEB',
+      'MAR',
+      'ABR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AGO',
+      'SET',
+      'OCT',
+      'NOV',
+      'DIC',
+    ];
     final day = dt.day.toString().padLeft(2, '0');
     final month = months[dt.month - 1];
     final year = dt.year;
@@ -1902,7 +2234,11 @@ class _TagInputWidgetState extends State<TagInputWidget> {
           children: [
             const Text(
               'Identificación Rápida (NENEOIDD)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 6),
             const Text(
@@ -1910,7 +2246,7 @@ class _TagInputWidgetState extends State<TagInputWidget> {
               style: TextStyle(fontSize: 11, color: Colors.white54),
             ),
             const SizedBox(height: 16),
-            
+
             Row(
               children: [
                 Expanded(
@@ -1921,10 +2257,16 @@ class _TagInputWidgetState extends State<TagInputWidget> {
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'Ingresa DNI (8 dígitos)',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 12),
+                      hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        fontSize: 12,
+                      ),
                       border: const OutlineInputBorder(),
                       counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ),
@@ -1933,17 +2275,28 @@ class _TagInputWidgetState extends State<TagInputWidget> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E80F0),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: _isLoadingNeneDni
                       ? const SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.search, size: 16),
-                  label: const Text('Consultar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  label: const Text(
+                    'Consultar',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                   onPressed: _isLoadingNeneDni ? null : _consultarNeneDni,
                 ),
               ],
@@ -1952,37 +2305,51 @@ class _TagInputWidgetState extends State<TagInputWidget> {
               const SizedBox(height: 8),
               Text(
                 '⚠ $_neneDniError',
-                style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
             const SizedBox(height: 16),
-            
+
             _buildNeneField('Nombres y Apellidos', _neneNombreCtrl),
             const SizedBox(height: 12),
-            
+
             Row(
               children: [
                 Expanded(
                   flex: 3,
-                  child: _buildNeneField('Edad', _neneEdadCtrl, keyboardType: TextInputType.number),
+                  child: _buildNeneField(
+                    'Edad',
+                    _neneEdadCtrl,
+                    keyboardType: TextInputType.number,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 7,
-                  child: _buildNeneField('Natural de (Ciudad)', _neneNaturalCtrl),
+                  child: _buildNeneField(
+                    'Natural de (Ciudad)',
+                    _neneNaturalCtrl,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            
+
             Row(
               children: [
                 Expanded(
-                  child: _buildNeneDropdownField(
-                    'Estado Civil', 
-                    _neneCivilCtrl,
-                    ['Soltero(a)', 'Casado(a)', 'Viudo(a)', 'Divorciado(a)', 'Conviviente'],
-                  ),
+                  child:
+                      _buildNeneDropdownField('Estado Civil', _neneCivilCtrl, [
+                        'Soltero(a)',
+                        'Casado(a)',
+                        'Viudo(a)',
+                        'Divorciado(a)',
+                        'Conviviente',
+                      ]),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1991,7 +2358,7 @@ class _TagInputWidgetState extends State<TagInputWidget> {
               ],
             ),
             const SizedBox(height: 12),
-            
+
             _buildNeneDropdownField(
               'Grado de Instrucción',
               _neneInstruccionCtrl,
@@ -2002,35 +2369,49 @@ class _TagInputWidgetState extends State<TagInputWidget> {
                 'Superior Incompleta',
                 'Primaria Completa',
                 'Primaria Incompleta',
-                'Sin Instrucción'
+                'Sin Instrucción',
               ],
             ),
             const SizedBox(height: 12),
-            
+
             _buildNeneField('Dirección Domiciliaria', _neneDireccionCtrl),
             const SizedBox(height: 20),
-            
+
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                  child: const Text(
+                    'Cancelar',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: () {
                     final compiled = _compileNeneoidd();
-                    context.read<InterventionProvider>().updateTagValue(widget.tagString, compiled);
+                    context.read<InterventionProvider>().updateTagValue(
+                      widget.tagString,
+                      compiled,
+                    );
                     Navigator.pop(context);
                   },
-                  child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Guardar',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -2040,13 +2421,22 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     );
   }
 
-  Widget _buildNeneField(String label, TextEditingController controller, {TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildNeneField(
+    String label,
+    TextEditingController controller, {
+    TextInputType keyboardType = TextInputType.text,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label.toUpperCase(),
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 0.8),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.white54,
+            letterSpacing: 0.8,
+          ),
         ),
         const SizedBox(height: 6),
         TextField(
@@ -2063,11 +2453,16 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     );
   }
 
-  Widget _buildNeneDropdownField(String label, TextEditingController controller, List<String> options) {
+  Widget _buildNeneDropdownField(
+    String label,
+    TextEditingController controller,
+    List<String> options,
+  ) {
     String? currentVal;
     final text = controller.text.toLowerCase().trim();
     for (final opt in options) {
-      if (opt.toLowerCase().trim() == text || (opt.toLowerCase().trim().startsWith(text) && text.isNotEmpty)) {
+      if (opt.toLowerCase().trim() == text ||
+          (opt.toLowerCase().trim().startsWith(text) && text.isNotEmpty)) {
         currentVal = opt;
         break;
       }
@@ -2075,13 +2470,18 @@ class _TagInputWidgetState extends State<TagInputWidget> {
     if (currentVal != null) {
       controller.text = currentVal;
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label.toUpperCase(),
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 0.8),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.white54,
+            letterSpacing: 0.8,
+          ),
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
@@ -2097,7 +2497,10 @@ class _TagInputWidgetState extends State<TagInputWidget> {
           items: options.map((o) {
             return DropdownMenuItem(
               value: o,
-              child: Text(o, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              child: Text(
+                o,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
             );
           }).toList(),
           onChanged: (val) {
@@ -2121,152 +2524,220 @@ class _TagInputWidgetState extends State<TagInputWidget> {
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Lugar de Redacción / Comisaría',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            if (_operatorUnit.isNotEmpty) ...[
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               const Text(
-                'DESDE TU PERFIL (PRESIONA PARA SELECCIONAR):',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 0.8),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E80F0),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                'Lugar de Redacción / Comisaría',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                icon: const Icon(Icons.business_rounded),
-                label: Text(
-                  _operatorUnit.toUpperCase(),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                onPressed: () {
-                  context.read<InterventionProvider>().updateTagValue(widget.tagString, _operatorUnit.toUpperCase());
-                  Navigator.pop(context);
-                },
               ),
-              const SizedBox(height: 20),
-            ],
-            const Text(
-              'COMISARÍAS ANTERIORES / GUARDADAS:',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 0.8),
-            ),
-            const SizedBox(height: 8),
-            _isLoadingComisarias
-                ? const Center(child: CircularProgressIndicator())
-                : _savedComisarias.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'No hay comisarías guardadas aún.',
-                          style: TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic),
-                        ),
-                      )
-                    : ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 180),
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: _savedComisarias.length,
-                          itemBuilder: (context, index) {
-                            final comisaria = _savedComisarias[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                              ),
-                              child: ListTile(
-                                dense: true,
-                                title: Text(
-                                  comisaria,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
-                                  onPressed: () async {
-                                    final newList = List<String>.from(_savedComisarias)..removeAt(index);
-                                    final prefs = await SharedPreferences.getInstance();
-                                    await prefs.setStringList('saved_comisarias', newList);
-                                    setState(() {
-                                      _savedComisarias = newList;
-                                    });
-                                  },
-                                ),
-                                onTap: () {
-                                  context.read<InterventionProvider>().updateTagValue(widget.tagString, comisaria);
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-            const SizedBox(height: 16),
-            const Text(
-              'INGRESAR NUEVA COMISARÍA MANUALMENTE:',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 0.8),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _ctrl,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: InputDecoration(
-                      hintText: 'Ej. COMISARÍA PNP MIRAFLORES',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 12),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              const SizedBox(height: 16),
+              if (_operatorUnit.isNotEmpty) ...[
+                const Text(
+                  'DESDE TU PERFIL (PRESIONA PARA SELECCIONAR):',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white54,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E80F0),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  icon: const Icon(Icons.business_rounded),
+                  label: Text(
+                    _operatorUnit.toUpperCase(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
-                  onPressed: () async {
-                    final text = _ctrl.text.trim().toUpperCase();
-                    if (text.isEmpty) return;
-                    
-                    final provider = context.read<InterventionProvider>();
-                    final navigator = Navigator.of(context);
-                    
-                    final newList = List<String>.from(_savedComisarias);
-                    if (!newList.contains(text)) {
-                      newList.add(text);
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setStringList('saved_comisarias', newList);
-                    }
-                    
-                    if (mounted) {
-                      provider.updateTagValue(widget.tagString, text);
-                      navigator.pop();
-                    }
+                  onPressed: () {
+                    context.read<InterventionProvider>().updateTagValue(
+                      widget.tagString,
+                      _operatorUnit.toUpperCase(),
+                    );
+                    Navigator.pop(context);
                   },
-                  child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
+                const SizedBox(height: 20),
               ],
-            ),
-          ],
+              const Text(
+                'COMISARÍAS ANTERIORES / GUARDADAS:',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white54,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _isLoadingComisarias
+                  ? const Center(child: CircularProgressIndicator())
+                  : _savedComisarias.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'No hay comisarías guardadas aún.',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    )
+                  : ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _savedComisarias.length,
+                        itemBuilder: (context, index) {
+                          final comisaria = _savedComisarias[index];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.03),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.05),
+                              ),
+                            ),
+                            child: ListTile(
+                              dense: true,
+                              title: Text(
+                                comisaria,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                  size: 16,
+                                ),
+                                onPressed: () async {
+                                  final newList = List<String>.from(
+                                    _savedComisarias,
+                                  )..removeAt(index);
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  await prefs.setStringList(
+                                    'saved_comisarias',
+                                    newList,
+                                  );
+                                  setState(() {
+                                    _savedComisarias = newList;
+                                  });
+                                },
+                              ),
+                              onTap: () {
+                                context
+                                    .read<InterventionProvider>()
+                                    .updateTagValue(
+                                      widget.tagString,
+                                      comisaria,
+                                    );
+                                Navigator.pop(context);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+              const SizedBox(height: 16),
+              const Text(
+                'INGRESAR NUEVA COMISARÍA MANUALMENTE:',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white54,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: InputDecoration(
+                        hintText: 'Ej. COMISARÍA PNP MIRAFLORES',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          fontSize: 12,
+                        ),
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () async {
+                      final text = _ctrl.text.trim().toUpperCase();
+                      if (text.isEmpty) return;
+
+                      final provider = context.read<InterventionProvider>();
+                      final navigator = Navigator.of(context);
+
+                      final newList = List<String>.from(_savedComisarias);
+                      if (!newList.contains(text)) {
+                        newList.add(text);
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setStringList('saved_comisarias', newList);
+                      }
+
+                      if (mounted) {
+                        provider.updateTagValue(widget.tagString, text);
+                        navigator.pop();
+                      }
+                    },
+                    child: const Text(
+                      'Guardar',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ));
+      );
     }
 
-    final hasOptions = widget.tagDef?.options != null && widget.tagDef!.options!.isNotEmpty;
+    final hasOptions =
+        widget.tagDef?.options != null && widget.tagDef!.options!.isNotEmpty;
     final isDni = _isDniTag();
     final isPlaca = _isPlacaTag();
 
@@ -2275,346 +2746,507 @@ class _TagInputWidgetState extends State<TagInputWidget> {
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Ingresar dato para: ${widget.tagDef?.name ?? widget.tagString}',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          if (hasOptions) ...[
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: _selectedOption,
-              decoration: const InputDecoration(labelText: 'Opciones preconfiguradas', border: OutlineInputBorder()),
-              items: widget.tagDef!.options!.map((o) {
-                return DropdownMenuItem(
-                  value: o,
-                  child: Text(o, maxLines: 2, overflow: TextOverflow.ellipsis),
-                );
-              }).toList(),
-              onChanged: (val) {
-                setState(() {
-                  _selectedOption = val;
-                  _ctrl.text = val ?? '';
-                });
-              },
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Ingresar dato para: ${widget.tagDef?.name ?? widget.tagString}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            const Text('O escribir manualmente:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-          ],
-          if (isDni) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('DNI'),
-                    selected: _documentType == 'DNI',
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _documentType = 'DNI';
-                          _dniResultado = null;
-                          _dniError = null;
-                          _ctrl.clear();
-                        });
-                      }
-                    },
+            if (hasOptions) ...[
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _selectedOption,
+                decoration: const InputDecoration(
+                  labelText: 'Opciones preconfiguradas',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.tagDef!.options!.map((o) {
+                  return DropdownMenuItem(
+                    value: o,
+                    child: Text(
+                      o,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedOption = val;
+                    _ctrl.text = val ?? '';
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'O escribir manualmente:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (isDni) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('DNI'),
+                      selected: _documentType == 'DNI',
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _documentType = 'DNI';
+                            _dniResultado = null;
+                            _dniError = null;
+                            _ctrl.clear();
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('CE (Extranjería)'),
+                      selected: _documentType == 'CE',
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _documentType = 'CE';
+                            _dniResultado = null;
+                            _dniError = null;
+                            _ctrl.clear();
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_buildQuickActionsRow() != null) _buildQuickActionsRow()!,
+            TextField(
+              controller: _ctrl,
+              keyboardType: isDni
+                  ? (_documentType == 'DNI'
+                        ? TextInputType.number
+                        : TextInputType.text)
+                  : TextInputType.text,
+              textCapitalization: isPlaca
+                  ? TextCapitalization.characters
+                  : TextCapitalization.none,
+              maxLines: (isDni || isPlaca) ? 1 : null,
+              maxLength: isDni
+                  ? (_documentType == 'DNI' ? 8 : 15)
+                  : (isPlaca ? 10 : null),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: isDni
+                    ? (_documentType == 'DNI'
+                          ? 'Ej: 12345678'
+                          : 'Ingresa Carnet de Extranjería')
+                    : (isPlaca ? 'Ej: ABC123' : 'Escribe el valor aquí...'),
+                counterText: '',
+              ),
+            ),
+            if (isDni) ...[
+              const SizedBox(height: 12),
+              if (!_hasApiKey) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    border: Border.all(color: Colors.amber.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS) para habilitar consultas.',
+                          style: TextStyle(
+                            color: Colors.deepOrange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('CE (Extranjería)'),
-                    selected: _documentType == 'CE',
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _documentType = 'CE';
-                          _dniResultado = null;
-                          _dniError = null;
-                          _ctrl.clear();
-                        });
-                      }
-                    },
+                const SizedBox(height: 12),
+              ] else ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 14),
+                        SizedBox(width: 6),
+                        Text(
+                          'Token de Factiliza configurado',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (_buildQuickActionsRow() != null) _buildQuickActionsRow()!,
-          TextField(
-            controller: _ctrl,
-            keyboardType: isDni
-                ? (_documentType == 'DNI' ? TextInputType.number : TextInputType.text)
-                : TextInputType.text,
-            textCapitalization: isPlaca ? TextCapitalization.characters : TextCapitalization.none,
-            maxLines: (isDni || isPlaca) ? 1 : null,
-            maxLength: isDni
-                ? (_documentType == 'DNI' ? 8 : 15)
-                : (isPlaca ? 10 : null),
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              hintText: isDni
-                  ? (_documentType == 'DNI' ? 'Ej: 12345678' : 'Ingresa Carnet de Extranjería')
-                  : (isPlaca ? 'Ej: ABC123' : 'Escribe el valor aquí...'),
-              counterText: '',
-            ),
-          ),
-          if (isDni) ...[
-            const SizedBox(height: 12),
-            if (!_hasApiKey) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  border: Border.all(color: Colors.amber.shade300),
-                  borderRadius: BorderRadius.circular(8),
+              ElevatedButton.icon(
+                icon: _isLoadingDni
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.search),
+                label: Text(
+                  _documentType == 'DNI'
+                      ? 'Consultar DNI Completo'
+                      : 'Consultar Carnet Extranjería',
                 ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS) para habilitar consultas.',
-                        style: TextStyle(color: Colors.deepOrange, fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasApiKey
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
+                onPressed: (_isLoadingDni || !_hasApiKey)
+                    ? null
+                    : _consultarDocumento,
               ),
-              const SizedBox(height: 12),
-            ] else ...[
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 8.0),
-                  child: Row(
+              if (_dniError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '⚠ $_dniError',
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+              if (_dniResultado != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    border: Border.all(color: Colors.green.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 14),
-                      SizedBox(width: 6),
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Datos Encontrados',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Token de Factiliza configurado',
-                        style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                        'Nombre completo: ${_dniResultado!.nombreCompleto}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      if (_dniResultado!.genero.isNotEmpty)
+                        Text(
+                          'Género: ${_dniResultado!.genero == "M" ? "Masculino" : "Femenino"}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      if (_dniResultado!.fechaNacimiento.isNotEmpty)
+                        Text(
+                          'Fecha de Nacimiento: ${_dniResultado!.fechaNacimiento}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      if (widget.tagString == '[imputado.dni]' &&
+                          _dniResultado!.fechaNacimiento.isNotEmpty)
+                        Text(
+                          'Edad Calculada: ${_calculateAge(_dniResultado!.fechaNacimiento)} años',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+            ],
+            if (isPlaca) ...[
+              const SizedBox(height: 12),
+              if (!_hasApiKey) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    border: Border.all(color: Colors.amber.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS) para habilitar consultas.',
+                          style: TextStyle(
+                            color: Colors.deepOrange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-            ElevatedButton.icon(
-              icon: _isLoadingDni
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.search),
-              label: Text(_documentType == 'DNI' ? 'Consultar DNI Completo' : 'Consultar Carnet Extranjería'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _hasApiKey ? Theme.of(context).colorScheme.primary : Colors.grey,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: (_isLoadingDni || !_hasApiKey) ? null : _consultarDocumento,
-            ),
-            if (_dniError != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '⚠ $_dniError',
-                style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ],
-            if (_dniResultado != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  border: Border.all(color: Colors.green.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
+                const SizedBox(height: 12),
+              ] else ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 8.0),
+                    child: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        Icon(Icons.check_circle, color: Colors.green, size: 14),
                         SizedBox(width: 6),
                         Text(
-                          'Datos Encontrados',
-                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14),
+                          'Token de Factiliza configurado',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text('Nombre completo: ${_dniResultado!.nombreCompleto}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    if (_dniResultado!.genero.isNotEmpty)
-                      Text('Género: ${_dniResultado!.genero == "M" ? "Masculino" : "Femenino"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    if (_dniResultado!.fechaNacimiento.isNotEmpty)
-                      Text('Fecha de Nacimiento: ${_dniResultado!.fechaNacimiento}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    if (widget.tagString == '[imputado.dni]' && _dniResultado!.fechaNacimiento.isNotEmpty)
-                      Text('Edad Calculada: ${_calculateAge(_dniResultado!.fechaNacimiento)} años', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                  ],
+                  ),
                 ),
+              ],
+              ElevatedButton.icon(
+                icon: _isLoadingPlaca
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.search),
+                label: const Text('Consultar Placa Completa'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasApiKey
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: (_isLoadingPlaca || !_hasApiKey)
+                    ? null
+                    : _consultarPlaca,
               ),
-            ],
-            const SizedBox(height: 12),
-          ],
-          if (isPlaca) ...[
-            const SizedBox(height: 12),
-            if (!_hasApiKey) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  border: Border.all(color: Colors.amber.shade300),
-                  borderRadius: BorderRadius.circular(8),
+              if (_placaError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '⚠ $_placaError',
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Token de Factiliza no configurado. Ve al menú principal -> Ajustes (API KEYS) para habilitar consultas.',
-                        style: TextStyle(color: Colors.deepOrange, fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 8.0),
-                  child: Row(
+              ],
+              if (_placaResultado != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    border: Border.all(color: Colors.green.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 14),
-                      SizedBox(width: 6),
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Datos de Vehículo Encontrados',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Token de Factiliza configurado',
-                        style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                        'Placa: ${_placaResultado!.placa}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Marca: ${_placaResultado!.marca}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Modelo: ${_placaResultado!.modelo}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Color: ${_placaResultado!.color}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Motor: ${_placaResultado!.motor}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Serie: ${_placaResultado!.serie}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-            ElevatedButton.icon(
-              icon: _isLoadingPlaca
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.search),
-              label: const Text('Consultar Placa Completa'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _hasApiKey ? Theme.of(context).colorScheme.primary : Colors.grey,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: (_isLoadingPlaca || !_hasApiKey) ? null : _consultarPlaca,
-            ),
-            if (_placaError != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '⚠ $_placaError',
-                style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ],
-            if (_placaResultado != null) ...[
+              ],
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  border: Border.all(color: Colors.green.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green, size: 18),
-                        SizedBox(width: 6),
-                        Text(
-                          'Datos de Vehículo Encontrados',
-                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Placa: ${_placaResultado!.placa}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    Text('Marca: ${_placaResultado!.marca}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    Text('Modelo: ${_placaResultado!.modelo}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    Text('Color: ${_placaResultado!.color}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    Text('Motor: ${_placaResultado!.motor}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    Text('Serie: ${_placaResultado!.serie}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                  ],
-                ),
-              ),
             ],
             const SizedBox(height: 12),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (widget.onHide != null)
-                TextButton.icon(
-                  style: TextButton.styleFrom(foregroundColor: Colors.red.shade400),
-                  icon: const Icon(Icons.visibility_off, size: 18),
-                  label: const Text('Ocultar'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (widget.onHide != null)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red.shade400,
+                    ),
+                    icon: const Icon(Icons.visibility_off, size: 18),
+                    label: const Text('Ocultar'),
+                    onPressed: () {
+                      widget.onHide!();
+                      Navigator.pop(context);
+                    },
+                  ),
+                const Spacer(),
+                ElevatedButton(
                   onPressed: () {
-                    widget.onHide!();
+                    final val = _ctrl.text.trim();
+                    final cleanVal = val
+                        .replaceAll('-', '')
+                        .replaceAll(' ', '')
+                        .toUpperCase();
+                    final cleanDniId = _dniResultado?.id
+                        .replaceAll('-', '')
+                        .replaceAll(' ', '')
+                        .toUpperCase();
+                    final cleanPlacaVal = _placaResultado?.placa
+                        .replaceAll('-', '')
+                        .replaceAll(' ', '')
+                        .toUpperCase();
+
+                    if (isDni &&
+                        _dniResultado != null &&
+                        cleanVal == cleanDniId) {
+                      final type = widget.tagString == '[imputado.dni]'
+                          ? 'imputado'
+                          : widget.tagString == '[testigo.dni]'
+                          ? 'testigo'
+                          : 'agraviado';
+                      context.read<InterventionProvider>().populateDniData(
+                        type,
+                        _dniResultado!,
+                      );
+                    } else if (isPlaca &&
+                        _placaResultado != null &&
+                        cleanVal == cleanPlacaVal) {
+                      context.read<InterventionProvider>().populatePlacaData(
+                        _placaResultado!,
+                      );
+                    } else {
+                      context.read<InterventionProvider>().updateTagValue(
+                        widget.tagString,
+                        val,
+                      );
+                    }
                     Navigator.pop(context);
                   },
+                  child: const Text('Guardar'),
                 ),
-              const Spacer(),
-              ElevatedButton(
-                onPressed: () {
-              final val = _ctrl.text.trim();
-              final cleanVal = val.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
-              final cleanDniId = _dniResultado?.id.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
-              final cleanPlacaVal = _placaResultado?.placa.replaceAll('-', '').replaceAll(' ', '').toUpperCase();
-
-              if (isDni && _dniResultado != null && cleanVal == cleanDniId) {
-                final type = widget.tagString == '[imputado.dni]'
-                    ? 'imputado'
-                    : widget.tagString == '[testigo.dni]'
-                        ? 'testigo'
-                        : 'agraviado';
-                context.read<InterventionProvider>().populateDniData(type, _dniResultado!);
-              } else if (isPlaca && _placaResultado != null && cleanVal == cleanPlacaVal) {
-                context.read<InterventionProvider>().populatePlacaData(_placaResultado!);
-              } else {
-                context.read<InterventionProvider>().updateTagValue(widget.tagString, val);
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Guardar'),
-          ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: _buildFormContent(context),
       ),
     );
@@ -2647,8 +3279,8 @@ class PersonEntryMethodSheet extends StatelessWidget {
     final title = isImputado
         ? 'Datos del Detenido / Imputado'
         : isTestigo
-            ? 'Datos del Testigo'
-            : 'Datos del Agraviado';
+        ? 'Datos del Testigo'
+        : 'Datos del Agraviado';
 
     final fieldName = tagDef?.name ?? tagStr;
 
@@ -2683,14 +3315,11 @@ class PersonEntryMethodSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Estás editando: $fieldName',
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.white38, fontSize: 12),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          
+
           // Option 1: DNI Quick Fill (Recomendado)
           InkWell(
             onTap: () => onChoice('dni'),
@@ -2699,7 +3328,10 @@ class PersonEntryMethodSheet extends StatelessWidget {
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [theme.colorScheme.primary, theme.colorScheme.primary.withValues(alpha: 0.7)],
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.primary.withValues(alpha: 0.7),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -2720,7 +3352,11 @@ class PersonEntryMethodSheet extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.badge, color: Colors.white, size: 24),
+                    child: const Icon(
+                      Icons.badge,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -2738,10 +3374,7 @@ class PersonEntryMethodSheet extends StatelessWidget {
                         SizedBox(height: 3),
                         Text(
                           'Autocompleta nombre, edad y nacimiento desde Reniec',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                       ],
                     ),
@@ -2751,9 +3384,9 @@ class PersonEntryMethodSheet extends StatelessWidget {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Option 2: Manual Fill
           InkWell(
             onTap: () => onChoice('manual'),
@@ -2776,7 +3409,11 @@ class PersonEntryMethodSheet extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.05),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.edit_note_outlined, color: Colors.white70, size: 24),
+                    child: const Icon(
+                      Icons.edit_note_outlined,
+                      color: Colors.white70,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -2807,7 +3444,7 @@ class PersonEntryMethodSheet extends StatelessWidget {
               ),
             ),
           ),
-          
+
           if (onHide != null) ...[
             const SizedBox(height: 12),
             // Option 3: Ocultar Etiqueta
@@ -2835,7 +3472,11 @@ class PersonEntryMethodSheet extends StatelessWidget {
                         color: Colors.red.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.visibility_off, color: Colors.redAccent, size: 24),
+                      child: const Icon(
+                        Icons.visibility_off,
+                        color: Colors.redAccent,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -2872,4 +3513,3 @@ class PersonEntryMethodSheet extends StatelessWidget {
     );
   }
 }
-
